@@ -20,6 +20,11 @@ enum PrototypeError: LocalizedError {
     var errorDescription: String? { if case .message(let text) = self { return text }; return nil }
 }
 
+private enum ContactScanError: LocalizedError {
+    case profilesNotReady
+    var errorDescription: String? { "联系人昵称或资料仍未加载完整，本次未替换联系人列表。请稍后刷新，或重新登录。" }
+}
+
 @MainActor
 final class BrowserEngine: NSObject, WKNavigationDelegate, WKUIDelegate, NSWindowDelegate {
     var webView: WKWebView?
@@ -168,32 +173,81 @@ final class BrowserEngine: NSObject, WKNavigationDelegate, WKUIDelegate, NSWindo
         throw PrototypeError.message("聊天页未就绪：请检查扫码登录、验证码或网页兼容性。")
     }
 
-    func scan() async throws -> [Contact] {
+    private func settledContactRows(timeout: Double, firstPage: Bool) async throws -> [[String: Any]] {
+        let started = ContinuousClock.now, deadline = started.advanced(by: .seconds(timeout))
+        var previous: String?, stableSince = started
+        while ContinuousClock.now < deadline {
+            try Task.checkCancellation()
+            guard let rows = try await call("rows") as? [[String: Any]] else { throw PrototypeError.message("会话脚本未返回列表") }
+            let signature = try json(rows)
+            if signature != previous { previous = signature; stableSince = .now }
+            let ready = !rows.isEmpty && rows.allSatisfy { row in
+                guard let id = row["id"] as? String, !id.isEmpty,
+                      row["titleReady"] as? Bool == true, row["profilePending"] as? Bool != true else { return false }
+                let title = row["title"] as? String ?? ""
+                // A long numeric fallback paired with an absent/unsupported
+                // avatar is not enough evidence that a participant has loaded.
+                let numeric = title.range(of: "^[0-9]{6,}$", options: .regularExpression) != nil
+                return !numeric || AvatarURLPolicy.url(row["avatarURL"] as? String) != nil
+            }
+            let allAvatarsPresent = rows.allSatisfy { AvatarURLPolicy.url($0["avatarURL"] as? String) != nil }
+            // Wait for addresses, not image downloads. Private/deleted profiles
+            // and groups can legitimately have no downloadable avatar.
+            let avatarGrace: Double = firstPage ? 2.5 : 1
+            if ready, stableSince.duration(to: .now) >= .seconds(firstPage ? 1 : 0.5),
+               allAvatarsPresent || started.duration(to: .now) >= .seconds(avatarGrace) { return rows }
+            try await pause(0.25)
+        }
+        throw ContactScanError.profilesNotReady
+    }
+
+    func scan(readinessTimeout: Double = 10) async throws -> [Contact] {
         try await waitUntilReady()
+        let deadline = ContinuousClock.now.advanced(by: .seconds(120))
+        for attempt in 0..<2 {
+            do { return try await scanContactsOnce(readinessTimeout: readinessTimeout, deadline: deadline) }
+            catch is ContactScanError {
+                if attempt == 1 || ContinuousClock.now >= deadline { throw ContactScanError.profilesNotReady }
+                log("联系人资料仍在加载，等待后自动补读一次…")
+                try await pause(0.75)
+            }
+        }
+        throw ContactScanError.profilesNotReady
+    }
+
+    private func scanContactsOnce(readinessTimeout: Double, deadline: ContinuousClock.Instant) async throws -> [Contact] {
         _ = try await call("scroll", [true])
-        try await pause(0.4)
         var found: [String: Contact] = [:]
         var order: [String] = []
         var idle = 0
         for step in 0..<160 {
-            try Task.checkCancellation()
-            guard let rows = try await call("rows") as? [[String: Any]] else { throw PrototypeError.message("会话脚本未返回列表") }
-            let previous = found.count
+            let remaining = ContinuousClock.now.duration(to: deadline).components
+            let seconds = Double(remaining.seconds) + Double(remaining.attoseconds) / 1e18
+            guard seconds > 0 else { throw ContactScanError.profilesNotReady }
+            let rows = try await settledContactRows(timeout: min(readinessTimeout, seconds), firstPage: step == 0)
+            var updated = false
             for row in rows {
-                guard let id = row["id"] as? String, !id.isEmpty else { continue }
+                guard let id = row["id"] as? String, !id.isEmpty,
+                      let title = row["title"] as? String, !title.isEmpty else { throw ContactScanError.profilesNotReady }
+                let contact = Contact(id: id, title: title, group: row["group"] as? Bool ?? false,
+                                      avatarURL: AvatarURLPolicy.url(row["avatarURL"] as? String)?.absoluteString ?? found[id]?.avatarURL)
                 if found[id] == nil { order.append(id) }
-                found[id] = Contact(id: id, title: row["title"] as? String ?? id, group: row["group"] as? Bool ?? false, avatarURL: AvatarURLPolicy.url(row["avatarURL"] as? String)?.absoluteString ?? found[id]?.avatarURL)
+                if found[id] != contact { updated = true }
+                found[id] = contact
             }
             let position = try await call("scroll") as? [String: Any] ?? [:]
             if position["found"] as? Bool != true { break }
-            idle = found.count == previous && position["bottom"] as? Bool == true ? idle + 1 : 0
-            if idle >= 5 { break }
-            if step % 10 == 0 { log("已读取 \(found.count) 个会话…") }
-            try await pause(0.4)
+            // Metadata changes also reset the bottom stability check. A stable
+            // count alone says nothing about whether participant names loaded.
+            idle = !updated && position["bottom"] as? Bool == true ? idle + 1 : 0
+            if idle >= 3 { break }
+            if step == 159 { throw ContactScanError.profilesNotReady }
+            if step % 10 == 0 { log("已读取 \(found.count) 个会话，正在等待资料稳定…") }
+            try await pause(0.25)
         }
         _ = try await call("scroll", [true])
         let contacts = order.compactMap { found[$0] }
-        if contacts.isEmpty { throw PrototypeError.message("没有读取到带会话 ID 的联系人，请检查登录状态或网页是否已变化。") }
+        guard !contacts.isEmpty else { throw ContactScanError.profilesNotReady }
         log("已读取 \(contacts.count) 个会话，其中 \(contacts.filter { $0.avatarURL != nil }.count) 个有头像地址。折叠/陌生人列表可能未包含在内。")
         return contacts
     }

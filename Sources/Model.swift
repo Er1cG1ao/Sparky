@@ -262,7 +262,7 @@ final class SparkyModel: ObservableObject {
             } catch { notice = error.localizedDescription; log("刷新失败：\(error.localizedDescription)") }
         }
     }
-    func synchronizeContacts(account: AccountInfo) async throws {
+    func synchronizeContacts(account: AccountInfo, readinessTimeout: Double = 10) async throws {
         try Task.checkCancellation()
         // Bind the account before scanning. Failed scans must never leave a
         // previous account's recipients or armed plan attached to a new login.
@@ -274,7 +274,7 @@ final class SparkyModel: ObservableObject {
             }
             state.account = account
         }
-        let contacts = try await engine.scan()
+        let contacts = try await engine.scan(readinessTimeout: readinessTimeout)
         try Task.checkCancellation()
         let verified = try await engine.accountInfo()
         guard verified.uid == account.uid else {

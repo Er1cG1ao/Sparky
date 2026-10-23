@@ -61,7 +61,12 @@
   }
   function rows(){return [...document.querySelectorAll('[data-e2e="conversation-item"]')].map((el,index)=>{
     const c=convOf(el);let group=false;try{group=Number(c?.type)===2||Number(c?.participantCount)>2;}catch{}
-    return {id:clean(c?.id||c?.conversationId),title:clean(el.querySelector('.conversationConversationItemtitle')?.textContent)||`会话 ${index+1}`,group,index,avatarURL:avatarOf(el,c)};});}
+    const id=clean(c?.id||c?.conversationId),title=clean(el.querySelector('.conversationConversationItemtitle')?.textContent),avatarURL=avatarOf(el,c);
+    // React mounts IDs before the participant profile has hydrated. Never
+    // manufacture a display name: the native scanner must wait or retry.
+    const titleReady=!!title&&title!==id;
+    const profilePending=!titleReady||(/^[0-9]{6,}$/.test(title)&&!avatarURL)||el.getAttribute('aria-busy')==='true';
+    return {id,title,titleReady,profilePending,group,index,avatarURL};});}
   function current(){const el=document.querySelector('.conversationConversationItemcurConversation');if(!el)return null;const c=convOf(el);return {id:clean(c?.id||c?.conversationId),title:clean(el.querySelector('.conversationConversationItemtitle')?.textContent)};}
   function editor(){return document.querySelector('[data-e2e="msg-input"] .public-DraftEditor-content, .DraftEditor-root [contenteditable="true"], [data-e2e="msg-input"] [contenteditable="true"]');}
   function status(){const login=!!document.querySelector('[data-e2e="login-container"]'),chat=!!document.querySelector('.conversationConversationListwrapper, [data-e2e="msg-input"]');
