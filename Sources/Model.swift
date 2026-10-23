@@ -65,6 +65,7 @@ struct SendRecord: Codable, Identifiable {
 }
 struct SavedState: Codable {
     var version = 1
+    var logoutPending: Bool? = nil
     var account: AccountInfo?
     var contacts: [Contact] = []
     var selected: Set<String> = []
@@ -124,12 +125,17 @@ final class SparkyModel: ObservableObject {
             saved.history[i].detail = dispatched ? "上次退出发生在发送阶段，可能已发出；不自动重试。" : "上次任务中断，尚未触发发送。"
             saved.history[i].finished = Date()
         }
+        if saved.logoutPending == true {
+            saved.account = nil; saved.contacts = []; saved.selected = []
+            saved.plan.enabled = false; saved.plan.enabledSince = nil
+        }
         engine.log = { [weak self] text in self?.log(text) }
         if !testing {
             loginEnabled = SMAppService.mainApp.status == .enabled
             timer = Timer.scheduledTimer(withTimeInterval: 10, repeats: true) { [weak self] _ in Task { @MainActor in self?.tick() } }
             wakeObserver = NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.didWakeNotification, object: nil, queue: .main) { [weak self] _ in Task { @MainActor in self?.tick() } }
             try? store.save(saved)
+            if saved.logoutPending == true { Task { [weak self] in await self?.logout() } }
         }
     }
     var selectedContacts: [Contact] { saved.contacts.filter { saved.selected.contains($0.id) } }
@@ -137,7 +143,7 @@ final class SparkyModel: ObservableObject {
         let s = saved.message.trimmingCharacters(in: .whitespacesAndNewlines)
         return !s.isEmpty && !s.contains("\n") && !s.contains("\r") && saved.message.utf16.count <= 500
     }
-    var canRun: Bool { saved.account != nil && !selectedContacts.isEmpty && messageValid }
+    var canRun: Bool { saved.logoutPending != true && saved.account != nil && !selectedContacts.isEmpty && messageValid }
     var nextRun: Date? { canRun ? saved.plan.next(at: now) : nil }
     var todayRecords: [SendRecord] { saved.history.filter { Calendar.current.isDateInToday($0.date) } }
     var todayConfirmed: Int { todayRecords.filter { $0.state == .confirmed }.count }
@@ -179,11 +185,13 @@ final class SparkyModel: ObservableObject {
     }
     func connect() {
         guard !busy else { return }
+        guard saved.logoutPending != true else { notice = "上次退出登录未完成，请先在设置中重试退出登录。"; return }
         do { try engine.start(show: true); engineActive = true; log("完成登录后，点击刷新联系人。") }
         catch { notice = error.localizedDescription }
     }
     func refresh() {
         guard !busy else { return }
+        guard saved.logoutPending != true else { notice = "请先完成退出登录，再重新连接账号。"; return }
         busy = true; activity = "正在刷新联系人…"
         Task {
             defer { busy = false; engine.stop(); engineActive = false; activity = "一切就绪"; changed?() }
@@ -200,6 +208,35 @@ final class SparkyModel: ObservableObject {
             } catch { notice = error.localizedDescription; log("刷新失败：\(error.localizedDescription)") }
         }
     }
+    func logout() async {
+        guard !busy else { return }
+        busy = true; activity = "正在退出登录…"; changed?()
+        defer { busy = false; engineActive = engine.webView != nil; changed?() }
+        do {
+            // Persist the intention first. On interruption the next launch
+            // resumes clearing before any login or scheduled send is allowed.
+            try commit { state in
+                state.logoutPending = true
+                state.plan.enabled = false; state.plan.enabledSince = nil
+                state.account = nil; state.contacts = []; state.selected = []
+            }
+        } catch {
+            activity = "退出登录未完成"
+            notice = "无法保存退出状态，尚未清除登录。请重试。\n\(error.localizedDescription)"
+            return
+        }
+        do {
+            try await engine.clearLoginData()
+            try commit { $0.logoutPending = nil }
+            activity = "已退出登录"
+            log("已清除本应用的抖音登录状态，定时计划已暂停。消息模板和发送记录保留。")
+        } catch {
+            activity = "退出登录未完成"
+            notice = "定时计划已暂停。退出登录尚未全部完成，请重试；重启后也会继续清理。\n\(error.localizedDescription)"
+            log("退出登录未完成，已阻止重新连接和定时发送。")
+        }
+    }
+
     func releaseEngine() {
         guard !busy else { return }
         engine.stop(); engineActive = false

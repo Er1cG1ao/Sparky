@@ -20,6 +20,7 @@ enum WindowTests {
         try await pause()
         let window=delegate.window!, model=delegate.model!
         try SelfTests.check(window.isVisible && NSApp.activationPolicy() == .regular,"visible main window uses regular Dock application policy")
+        try SelfTests.check(find(window,"account.logout.sidebar") != nil,"sidebar exposes logout beside the account name")
         // The right edge is deliberately outside the icon and text, inside the
         // same rounded row background users see as the selection highlight.
         for name in ["联系人","发送记录","设置","发送计划"] {
@@ -34,6 +35,7 @@ enum WindowTests {
             try await pause()
             let title=find(window,"page.title").flatMap { attribute($0,"accessibilityValue") as? String ?? attribute($0,"accessibilityLabel") as? String }
             try SelfTests.check(title == name,"clicking empty row space opens \(name), title=\(title ?? "nil")")
+            if name == "设置" { try SelfTests.check(find(window,"account.logout.settings") != nil,"settings exposes the same logout action") }
         }
         window.makeFirstResponder(nil)
         let event=NSEvent.keyEvent(with:.keyDown,location:.zero,modifierFlags:[.command],timestamp:ProcessInfo.processInfo.systemUptime,windowNumber:window.windowNumber,context:nil,characters:"w",charactersIgnoringModifiers:"w",isARepeat:false,keyCode:13)!

@@ -87,6 +87,21 @@ final class BrowserEngine: NSObject, WKNavigationDelegate, WKUIDelegate, NSWindo
         log("已释放 WKWebView；WebKit 子进程的回收时间由系统决定，登录数据保留。")
     }
 
+    func clearLoginData() async throws {
+        guard !busy else { throw PrototypeError.message("当前任务进行中，请完成后再退出登录。") }
+        // Capture the actual store before releasing the view. In offline tests
+        // this is exclusively a nonpersistent store, never the user's login.
+        let dataStore = webView?.configuration.websiteDataStore ?? (selfTest ? WKWebsiteDataStore.nonPersistent() : .default())
+        stop()
+        await withCheckedContinuation { (continuation:CheckedContinuation<Void,Never>) in
+            dataStore.removeData(ofTypes:WKWebsiteDataStore.allWebsiteDataTypes(),modifiedSince:.distantPast) { continuation.resume() }
+        }
+        let cookies:[HTTPCookie] = await withCheckedContinuation { continuation in
+            dataStore.httpCookieStore.getAllCookies { continuation.resume(returning:$0) }
+        }
+        guard cookies.isEmpty else { throw PrototypeError.message("登录数据尚未清理完成，请重试退出登录。") }
+    }
+
     func trustedURL(_ url: URL?) -> Bool {
         guard let url else { return false }
         if selfTest { return url.standardizedFileURL == fixtureURL?.standardizedFileURL }

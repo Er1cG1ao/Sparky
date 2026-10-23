@@ -22,6 +22,7 @@ struct SparkyView: View {
     @ViewState private var search = ""
     @ViewState private var review = false
     @ViewState private var clearing = false
+    @ViewState private var loggingOut = false
     init(model:SparkyModel) {
         self.model=model
         let initial: Page = CommandLine.arguments.contains("--ui-contacts") ? .contacts : CommandLine.arguments.contains("--ui-history") ? .history : CommandLine.arguments.contains("--ui-settings") ? .settings : .plan
@@ -41,7 +42,15 @@ struct SparkyView: View {
                 Spacer()
                 VStack(alignment:.leading,spacing:8) {
                     HStack { Circle().fill(model.busy ? .orange : .green).frame(width:7,height:7); Text(model.busy ? "任务进行中" : "菜单栏中待命").font(.caption) }
-                    Text(model.saved.account?.nickname ?? "尚未连接账号").font(.subheadline.weight(.medium))
+                    HStack(spacing:8) {
+                        Text(model.saved.account?.nickname ?? "尚未连接账号").font(.subheadline.weight(.medium)).lineLimit(1).truncationMode(.middle)
+                        Spacer(minLength:0)
+                        if model.saved.account != nil || model.saved.logoutPending == true {
+                            Button { loggingOut = true } label: { Label("退出登录",systemImage:"rectangle.portrait.and.arrow.right").font(.caption) }.buttonStyle(.plain).foregroundStyle(.secondary).disabled(model.busy).help("退出本应用的抖音登录").accessibilityIdentifier("account.logout.sidebar")
+                        } else {
+                            Button("登录") { model.connect() }.font(.caption).buttonStyle(.plain).foregroundStyle(.orange).disabled(model.busy)
+                        }
+                    }
                     Text(model.engineActive ? "WebKit 已启动" : "引擎休眠 · 按需启动").font(.caption).foregroundStyle(.secondary)
                 }.padding(18)
             }.navigationSplitViewColumnWidth(min:210,ideal:225,max:245)
@@ -65,7 +74,16 @@ struct SparkyView: View {
         .onAppear { model.confirmSend = { page = .plan; review = true } }
         .sheet(isPresented:$review) { reviewSheet }
         .alert("操作未完成",isPresented:Binding(get:{model.notice != nil},set:{if !$0 { model.notice = nil }})) { Button("好",role:.cancel) { model.notice = nil } } message: { Text(model.notice ?? "") }
-        .confirmationDialog("清空所有发送记录？",isPresented:$clearing) { Button("清空记录",role:.destructive) { model.clearHistory() } } message: { Text("这不会重置今天的定时任务，也不会重新发送。") }
+        .confirmationDialog(loggingOut ? "退出抖音登录？" : "清空所有发送记录？",isPresented:Binding(get:{loggingOut || clearing},set:{ if !$0 { loggingOut=false; clearing=false } }),titleVisibility:.visible) {
+            if loggingOut {
+                Button("退出登录",role:.destructive) { Task { await model.logout() } }.disabled(model.busy)
+            } else {
+                Button("清空记录",role:.destructive) { model.clearHistory() }
+            }
+            Button("取消",role:.cancel) { }
+        } message: {
+            Text(loggingOut ? "将暂停定时计划并清空当前联系人和选择，保留消息模板与发送记录。仅退出本应用，不影响手机或 Safari。" : "这不会重置今天的定时任务，也不会重新发送。")
+        }
     }
     private var subtitle: String {
         switch page ?? .plan { case .plan: return "一条消息，一份每天的惦记。"; case .contacts: return "选择要保持联系的人，也支持群聊。"; case .history: return "每位联系人的发送结果，都在这里。"; case .settings: return "账号、启动方式与运行状态。" }
@@ -134,11 +152,11 @@ struct SparkyView: View {
     }
     private var settings: some View {
         Group {
-            card { Label("抖音账号",systemImage:"person.crop.circle").font(.headline); Text(model.saved.account?.nickname ?? "尚未连接").font(.title3.weight(.medium)); if let a = model.saved.account { Text("抖音号 · \(a.douyinID)").font(.caption).foregroundStyle(.secondary) }; HStack { Button("打开登录窗口") { model.connect() }; Button("刷新账号与联系人") { model.refresh() } }.disabled(model.busy); Text("切换账号后请刷新联系人。账号发生变化时会关闭旧计划并清空选择。").font(.caption).foregroundStyle(.secondary) }
+            card { Label("抖音账号",systemImage:"person.crop.circle").font(.headline); Text(model.saved.account?.nickname ?? "尚未连接").font(.title3.weight(.medium)); if let a = model.saved.account { Text("抖音号 · \(a.douyinID)").font(.caption).foregroundStyle(.secondary) }; HStack { Button("打开登录窗口") { model.connect() }; Button("刷新账号与联系人") { model.refresh() }; Button("退出登录",role:.destructive) { loggingOut = true }.accessibilityIdentifier("account.logout.settings") }.disabled(model.busy); Text("切换账号后请刷新联系人。账号发生变化时会关闭旧计划并清空选择。").font(.caption).foregroundStyle(.secondary) }
             card { Toggle("登录 Mac 时启动 Sparky",isOn:Binding(get:{model.loginEnabled},set:{model.setLoginItem($0)})); Text("先将应用移入“应用程序”。可在系统设置的“登录项”中管理。").font(.caption).foregroundStyle(.secondary) }
             card { HStack { Label("运行状态",systemImage:"waveform.path").font(.headline); Spacer(); Text(model.engineActive ? "引擎已启动" : "引擎休眠").foregroundStyle(.secondary) }; Text("使用 macOS 自带 WebKit；任务结束后释放网页，登录状态保留。").font(.callout).foregroundStyle(.secondary); Button("释放当前引擎") { model.releaseEngine() }.disabled(model.busy || !model.engineActive) }
             card { HStack { Text("运行日志").font(.headline); Spacer(); Button("复制日志") { NSPasteboard.general.clearContents(); NSPasteboard.general.setString(model.logs.joined(separator:"\n"),forType:.string) } }; Text(model.logs.suffix(10).joined(separator:"\n").isEmpty ? "暂无日志" : model.logs.suffix(10).joined(separator:"\n")).font(.system(size:11,design:.monospaced)).foregroundStyle(.secondary).textSelection(.enabled) }
-            Text("Sparky 0.2.3 · macOS 原生界面\n设置与记录保存在本机；登录数据由系统 WebKit 管理。").font(.caption).foregroundStyle(.secondary)
+            Text("Sparky 0.2.4 · macOS 原生界面\n设置与记录保存在本机；登录数据由系统 WebKit 管理。").font(.caption).foregroundStyle(.secondary)
         }
     }
     private var reviewSheet: some View {

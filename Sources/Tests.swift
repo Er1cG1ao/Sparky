@@ -7,6 +7,7 @@ enum SelfTests {
     static func run(_ model: SparkyModel) async throws {
         DispatchQueue.main.asyncAfter(deadline:.now()+100) { fputs("FAIL: test timeout\n",stderr); exit(1) }
         try await AvatarTests.run()
+        try await LogoutTests.run()
         var calendar = Calendar(identifier:.gregorian); calendar.timeZone = TimeZone(identifier:"America/New_York")!
         func date(_ value:String) -> Date { let f=ISO8601DateFormatter(); return f.date(from:value)! }
         let morning = date("2026-10-23T12:00:00Z"), due=date("2026-10-23T13:00:00Z"), late=date("2026-10-23T20:00:00Z")
