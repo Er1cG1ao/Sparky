@@ -1,0 +1,9 @@
+build/
+dist/
+*.app/
+*.zip
+.DS_Store
+state.json
+recovery-*.json
+*.log
+*.dmg

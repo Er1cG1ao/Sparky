@@ -1,0 +1,25 @@
+<!doctype html><meta charset="utf-8"><title>离线 WebKit 测试</title>
+<style>.conversationConversationListwrapper{height:200px;overflow:auto}.conversationConversationItemcurConversation{background:#eee}</style>
+<div class="conversationConversationListwrapper">
+ <div data-e2e="conversation-item"><span class="conversationConversationItemtitle">离线联系人 A</span></div>
+ <div data-e2e="conversation-item"><span class="conversationConversationItemtitle">离线联系人 B</span></div>
+</div>
+<div data-e2e="msg-input"><div class="public-DraftEditor-content" contenteditable="true"></div></div>
+<svg width="80" height="30" class="messageMsgInputpublishBtn" data-e2e="msg-send"><text y="20">离线发送</text></svg>
+<div id="messages"></div>
+<script>
+window.fixtureSent=0;
+for(const [i,el] of [...document.querySelectorAll('[data-e2e="conversation-item"]')].entries()){
+ const conversation={id:i?'test-b':'test-a',type:1};
+ el.__reactProps$fixture={conversation};el.__reactFiber$fixture={memoizedProps:{conversation},return:null};
+ el.addEventListener('click',()=>{document.querySelectorAll('.conversationConversationItemcurConversation').forEach(n=>n.classList.remove('conversationConversationItemcurConversation'));el.classList.add('conversationConversationItemcurConversation');});
+}
+const sendButton=document.querySelector('[data-e2e="msg-send"]');
+sendButton.click=undefined; // Reproduce an SVG element without HTMLElement.click().
+sendButton.onclick=()=>{
+ const ed=document.querySelector('[contenteditable]');const wrap=document.createElement('div');wrap.className='MessageBoxContentisFromMe';
+ const msg=document.createElement('span');msg.setAttribute('data-e2e','msg-item-content');msg.textContent=ed.textContent;wrap.appendChild(msg);document.querySelector('#messages').appendChild(wrap);ed.textContent='';window.fixtureSent++;
+ fetch('https://imapi.douyin.com/v1/message/send');
+};
+fetch('https://www.douyin.com/aweme/v1/web/user/profile/self/');
+</script>
