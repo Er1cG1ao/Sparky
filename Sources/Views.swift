@@ -36,7 +36,7 @@ struct SparkyView: View {
                     VStack(alignment:.leading,spacing:3) { Text("Sparky").font(.title2.bold()); Text("让联系，持续发生").font(.caption).foregroundStyle(.secondary) }
                 }.padding(.horizontal,18).padding(.top,25)
                 VStack(spacing:5) { ForEach(Page.allCases) { item in
-                    Button { page = item } label: { HStack(spacing:10) { Image(systemName:item.icon).frame(width:21); Text(item.rawValue); Spacer() }.font(.body.weight(page == item ? .semibold : .regular)).padding(.horizontal,13).padding(.vertical,11).foregroundStyle(page == item ? Color.orange : Color.primary).background(page == item ? Color.orange.opacity(0.12) : Color.clear,in:RoundedRectangle(cornerRadius:9)) }.buttonStyle(.plain)
+                    Button { page = item } label: { HStack(spacing:10) { Image(systemName:item.icon).frame(width:21); Text(item.rawValue); Spacer() }.font(.body.weight(page == item ? .semibold : .regular)).padding(.horizontal,13).padding(.vertical,11).foregroundStyle(page == item ? Color.orange : Color.primary).background(page == item ? Color.orange.opacity(0.12) : Color.clear,in:RoundedRectangle(cornerRadius:9)).contentShape(RoundedRectangle(cornerRadius:9)) }.buttonStyle(.plain).accessibilityIdentifier("sidebar.\(item.rawValue)")
                 } }.padding(.horizontal,12)
                 Spacer()
                 VStack(alignment:.leading,spacing:8) {
@@ -48,7 +48,7 @@ struct SparkyView: View {
         } detail: {
             VStack(spacing:0) {
                 HStack {
-                    VStack(alignment:.leading,spacing:5) { Text((page ?? .plan).rawValue).font(.largeTitle.bold()); Text(subtitle).font(.subheadline).foregroundStyle(.secondary) }
+                    VStack(alignment:.leading,spacing:5) { Text((page ?? .plan).rawValue).font(.largeTitle.bold()).accessibilityIdentifier("page.title"); Text(subtitle).font(.subheadline).foregroundStyle(.secondary) }
                     Spacer()
                     if page == .contacts { Button { model.refresh() } label: { Label("刷新",systemImage:"arrow.clockwise") }.disabled(model.busy) }
                 }.padding(.horizontal,30).padding(.top,28).padding(.bottom,24)
@@ -138,7 +138,7 @@ struct SparkyView: View {
             card { Toggle("登录 Mac 时启动 Sparky",isOn:Binding(get:{model.loginEnabled},set:{model.setLoginItem($0)})); Text("先将应用移入“应用程序”。可在系统设置的“登录项”中管理。").font(.caption).foregroundStyle(.secondary) }
             card { HStack { Label("运行状态",systemImage:"waveform.path").font(.headline); Spacer(); Text(model.engineActive ? "引擎已启动" : "引擎休眠").foregroundStyle(.secondary) }; Text("使用 macOS 自带 WebKit；任务结束后释放网页，登录状态保留。").font(.callout).foregroundStyle(.secondary); Button("释放当前引擎") { model.releaseEngine() }.disabled(model.busy || !model.engineActive) }
             card { HStack { Text("运行日志").font(.headline); Spacer(); Button("复制日志") { NSPasteboard.general.clearContents(); NSPasteboard.general.setString(model.logs.joined(separator:"\n"),forType:.string) } }; Text(model.logs.suffix(10).joined(separator:"\n").isEmpty ? "暂无日志" : model.logs.suffix(10).joined(separator:"\n")).font(.system(size:11,design:.monospaced)).foregroundStyle(.secondary).textSelection(.enabled) }
-            Text("Sparky 0.2.1 · macOS 原生界面\n设置与记录保存在本机；登录数据由系统 WebKit 管理。").font(.caption).foregroundStyle(.secondary)
+            Text("Sparky 0.2.2 · macOS 原生界面\n设置与记录保存在本机；登录数据由系统 WebKit 管理。").font(.caption).foregroundStyle(.secondary)
         }
     }
     private var reviewSheet: some View {

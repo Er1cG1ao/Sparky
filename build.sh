@@ -16,8 +16,8 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
 <key>CFBundleName</key><string>Sparky</string>
 <key>CFBundleDisplayName</key><string>Sparky</string>
 <key>CFBundlePackageType</key><string>APPL</string>
-<key>CFBundleShortVersionString</key><string>0.2.1</string>
-<key>CFBundleVersion</key><string>21</string>
+<key>CFBundleShortVersionString</key><string>0.2.2</string>
+<key>CFBundleVersion</key><string>22</string>
 <key>LSMinimumSystemVersion</key><string>14.0</string>
 <key>LSUIElement</key><true/>
 <key>NSHighResolutionCapable</key><true/>
