@@ -25,6 +25,7 @@ final class BrowserEngine: NSObject, WKNavigationDelegate, WKUIDelegate, NSWindo
     var webView: WKWebView?
     var window: NSWindow?
     var log: (String) -> Void = { _ in }
+    var loginWindowClosed: (() -> Void)?
     var busy = false
     var draft: (id: String, text: String)?
     private var lastDispatch: ContinuousClock.Instant?
@@ -139,8 +140,28 @@ final class BrowserEngine: NSObject, WKNavigationDelegate, WKUIDelegate, NSWindo
 
     func pause(_ seconds: Double) async throws { try await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000)) }
 
+    func waitForLogin(timeout: Double = 300) async throws -> AccountInfo {
+        guard let expected = webView else { throw PrototypeError.message("登录窗口未打开，请重新登录。") }
+        let deadline = ContinuousClock.now.advanced(by: .seconds(timeout))
+        while ContinuousClock.now < deadline {
+            try Task.checkCancellation()
+            guard webView === expected else { throw CancellationError() }
+            if let status = try? await call("status") as? [String: Any],
+               status["chatReady"] as? Bool == true,
+               let profile = status["profile"] as? [String: Any],
+               let uid = profile["uid"] as? String, !uid.isEmpty {
+                try Task.checkCancellation()
+                guard webView === expected else { throw CancellationError() }
+                return AccountInfo(uid: uid, nickname: profile["nickname"] as? String ?? "抖音账号", douyinID: profile["douyinID"] as? String ?? "")
+            }
+            try await pause(0.5)
+        }
+        throw PrototypeError.message("等待登录超时。请重新打开登录窗口，完成扫码或验证码。")
+    }
+
     func waitUntilReady() async throws {
         for _ in 0..<60 {
+            try Task.checkCancellation()
             if let status = try? await call("status") as? [String: Any], status["chatReady"] as? Bool == true { return }
             try await pause(0.5)
         }
@@ -155,6 +176,7 @@ final class BrowserEngine: NSObject, WKNavigationDelegate, WKUIDelegate, NSWindo
         var order: [String] = []
         var idle = 0
         for step in 0..<160 {
+            try Task.checkCancellation()
             guard let rows = try await call("rows") as? [[String: Any]] else { throw PrototypeError.message("会话脚本未返回列表") }
             let previous = found.count
             for row in rows {
@@ -304,6 +326,7 @@ final class BrowserEngine: NSObject, WKNavigationDelegate, WKUIDelegate, NSWindo
 
     func windowShouldClose(_ sender: NSWindow) -> Bool {
         guard !busy else { return false }
+        loginWindowClosed?()
         stop(); return true
     }
 

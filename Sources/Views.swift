@@ -45,7 +45,9 @@ struct SparkyView: View {
                     HStack(spacing:8) {
                         Text(model.saved.account?.nickname ?? "尚未连接账号").font(.subheadline.weight(.medium)).lineLimit(1).truncationMode(.middle)
                         Spacer(minLength:0)
-                        if model.saved.account != nil || model.saved.logoutPending == true {
+                        if model.loginInProgress {
+                            Button("取消登录") { model.cancelLogin() }.font(.caption).buttonStyle(.plain).foregroundStyle(.secondary)
+                        } else if model.saved.account != nil || model.saved.logoutPending == true {
                             Button { loggingOut = true } label: { Label("退出登录",systemImage:"rectangle.portrait.and.arrow.right").font(.caption) }.buttonStyle(.plain).foregroundStyle(.secondary).disabled(model.busy).help("退出本应用的抖音登录").accessibilityIdentifier("account.logout.sidebar")
                         } else {
                             Button("登录") { model.connect() }.font(.caption).buttonStyle(.plain).foregroundStyle(.orange).disabled(model.busy)
@@ -82,7 +84,7 @@ struct SparkyView: View {
             }
             Button("取消",role:.cancel) { }
         } message: {
-            Text(loggingOut ? "将暂停定时计划并清空当前联系人和选择，保留消息模板与发送记录。仅退出本应用，不影响手机或 Safari。" : "这不会重置今天的定时任务，也不会重新发送。")
+            Text(loggingOut ? "将暂停定时计划并清空当前联系人，保留各账号的好友选择、消息模板与发送记录。仅退出本应用，不影响手机或 Safari。" : "这不会重置今天的定时任务，也不会重新发送。")
         }
     }
     private var subtitle: String {
@@ -152,11 +154,11 @@ struct SparkyView: View {
     }
     private var settings: some View {
         Group {
-            card { Label("抖音账号",systemImage:"person.crop.circle").font(.headline); Text(model.saved.account?.nickname ?? "尚未连接").font(.title3.weight(.medium)); if let a = model.saved.account { Text("抖音号 · \(a.douyinID)").font(.caption).foregroundStyle(.secondary) }; HStack { Button("打开登录窗口") { model.connect() }; Button("刷新账号与联系人") { model.refresh() }; Button("退出登录",role:.destructive) { loggingOut = true }.accessibilityIdentifier("account.logout.settings") }.disabled(model.busy); Text("切换账号后请刷新联系人。账号发生变化时会关闭旧计划并清空选择。").font(.caption).foregroundStyle(.secondary) }
+            card { Label("抖音账号",systemImage:"person.crop.circle").font(.headline); Text(model.saved.account?.nickname ?? "尚未连接").font(.title3.weight(.medium)); if let a = model.saved.account { Text("抖音号 · \(a.douyinID)").font(.caption).foregroundStyle(.secondary) }; HStack { Button("打开登录窗口") { model.connect() }; Button("刷新账号与联系人") { model.refresh() }; Button("退出登录",role:.destructive) { loggingOut = true }.accessibilityIdentifier("account.logout.settings") }.disabled(model.busy); if model.loginInProgress { Button("取消登录") { model.cancelLogin() } }; Text("登录后自动收起窗口并读取联系人，按账号恢复已选会话。切换账号或退出登录后需手动开启定时计划。").font(.caption).foregroundStyle(.secondary) }
             card { Toggle("登录 Mac 时启动 Sparky",isOn:Binding(get:{model.loginEnabled},set:{model.setLoginItem($0)})); Text("先将应用移入“应用程序”。可在系统设置的“登录项”中管理。").font(.caption).foregroundStyle(.secondary) }
             card { HStack { Label("运行状态",systemImage:"waveform.path").font(.headline); Spacer(); Text(model.engineActive ? "引擎已启动" : "引擎休眠").foregroundStyle(.secondary) }; Text("使用 macOS 自带 WebKit；任务结束后释放网页，登录状态保留。").font(.callout).foregroundStyle(.secondary); Button("释放当前引擎") { model.releaseEngine() }.disabled(model.busy || !model.engineActive) }
             card { HStack { Text("运行日志").font(.headline); Spacer(); Button("复制日志") { NSPasteboard.general.clearContents(); NSPasteboard.general.setString(model.logs.joined(separator:"\n"),forType:.string) } }; Text(model.logs.suffix(10).joined(separator:"\n").isEmpty ? "暂无日志" : model.logs.suffix(10).joined(separator:"\n")).font(.system(size:11,design:.monospaced)).foregroundStyle(.secondary).textSelection(.enabled) }
-            Text("Sparky 0.2.4 · macOS 原生界面\n设置与记录保存在本机；登录数据由系统 WebKit 管理。").font(.caption).foregroundStyle(.secondary)
+            Text("Sparky 0.2.5 · macOS 原生界面\n设置与记录保存在本机；登录数据由系统 WebKit 管理。").font(.caption).foregroundStyle(.secondary)
         }
     }
     private var reviewSheet: some View {

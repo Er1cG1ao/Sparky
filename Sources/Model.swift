@@ -66,12 +66,19 @@ struct SendRecord: Codable, Identifiable {
 struct SavedState: Codable {
     var version = 1
     var logoutPending: Bool? = nil
+    var selectionsByAccount: [String: Set<String>]? = nil
     var account: AccountInfo?
     var contacts: [Contact] = []
     var selected: Set<String> = []
     var message = "续火花 🔥"
     var plan = DailyPlan()
     var history: [SendRecord] = []
+    mutating func rememberCurrentSelection() {
+        guard let uid = account?.uid, !uid.isEmpty else { return }
+        if selectionsByAccount == nil { selectionsByAccount = [:] }
+        // Do not overwrite remembered IDs missing from a partial contact scan.
+        if selectionsByAccount?[uid] == nil { selectionsByAccount?[uid] = selected }
+    }
 }
 
 final class LocalStore {
@@ -114,6 +121,9 @@ final class SparkyModel: ObservableObject {
     var wakeObserver: NSObjectProtocol?
     @Published var cancelRequested = false
     let testing: Bool
+    @Published private(set) var loginInProgress = false
+    private var loginTask: Task<Void, Never>?
+    private var loginID: UUID?
 
     init(store: LocalStore, engine: BrowserEngine, testing: Bool = false) {
         self.store = store; self.engine = engine; self.testing = testing
@@ -125,11 +135,13 @@ final class SparkyModel: ObservableObject {
             saved.history[i].detail = dispatched ? "上次退出发生在发送阶段，可能已发出；不自动重试。" : "上次任务中断，尚未触发发送。"
             saved.history[i].finished = Date()
         }
+        saved.rememberCurrentSelection()
         if saved.logoutPending == true {
             saved.account = nil; saved.contacts = []; saved.selected = []
             saved.plan.enabled = false; saved.plan.enabledSince = nil
         }
         engine.log = { [weak self] text in self?.log(text) }
+        engine.loginWindowClosed = { [weak self] in self?.cancelLogin() }
         if !testing {
             loginEnabled = SMAppService.mainApp.status == .enabled
             timer = Timer.scheduledTimer(withTimeInterval: 10, repeats: true) { [weak self] _ in Task { @MainActor in self?.tick() } }
@@ -164,8 +176,21 @@ final class SparkyModel: ObservableObject {
         guard !busy else { return }
         do { try commit(change) } catch { notice = "无法保存设置：\(error.localizedDescription)" }
     }
-    func toggleContact(_ id: String) { edit { if $0.selected.contains(id) { $0.selected.remove(id) } else { $0.selected.insert(id) } } }
-    func select(_ contacts: [Contact], enabled: Bool) { edit { state in for c in contacts { if enabled { state.selected.insert(c.id) } else { state.selected.remove(c.id) } } } }
+    func toggleContact(_ id: String) {
+        guard let contact = saved.contacts.first(where: { $0.id == id }) else { return }
+        select([contact], enabled: !saved.selected.contains(id))
+    }
+    func select(_ contacts: [Contact], enabled: Bool) {
+        edit { state in
+            state.rememberCurrentSelection()
+            guard let uid = state.account?.uid else { return }
+            let available = Set(state.contacts.map(\.id))
+            for c in contacts where available.contains(c.id) {
+                if enabled { state.selected.insert(c.id); state.selectionsByAccount?[uid, default: []].insert(c.id) }
+                else { state.selected.remove(c.id); state.selectionsByAccount?[uid, default: []].remove(c.id) }
+            }
+        }
+    }
     func setSchedule(_ enabled: Bool) {
         guard !busy else { return }
         if enabled && !canRun { notice = "请先连接账号、选择联系人，并填写一条有效消息。"; return }
@@ -186,26 +211,94 @@ final class SparkyModel: ObservableObject {
     func connect() {
         guard !busy else { return }
         guard saved.logoutPending != true else { notice = "上次退出登录未完成，请先在设置中重试退出登录。"; return }
-        do { try engine.start(show: true); engineActive = true; log("完成登录后，点击刷新联系人。") }
-        catch { notice = error.localizedDescription }
+        do { try engine.start(show: true) }
+        catch { notice = error.localizedDescription; return }
+        let id = UUID(); loginID = id
+        busy = true; loginInProgress = true; engineActive = true
+        activity = "等待扫码登录…"; changed?()
+        log("登录成功后将自动收起窗口并读取联系人；关闭登录窗口可取消。")
+        loginTask = Task { [weak self] in
+            guard let self else { return }
+            defer {
+                if loginID == id {
+                    engine.busy = false; engine.stop(); engineActive = false
+                    busy = false; loginInProgress = false; loginID = nil; loginTask = nil; changed?()
+                }
+            }
+            do {
+                let account = try await engine.waitForLogin()
+                try Task.checkCancellation()
+                guard loginID == id else { return }
+                loginInProgress = false; engine.busy = true
+                engine.window?.orderOut(nil)
+                activity = "登录成功，正在读取联系人…"; changed?()
+                try await synchronizeContacts(account: account)
+                activity = "联系人已更新"
+            } catch is CancellationError { }
+            catch {
+                guard loginID == id else { return }
+                activity = "登录或联系人读取未完成"
+                notice = error.localizedDescription
+                log("登录或读取失败：\(error.localizedDescription)")
+            }
+        }
+    }
+    func cancelLogin() {
+        guard loginInProgress else { return }
+        loginTask?.cancel(); loginTask = nil; loginID = nil; loginInProgress = false
+        engine.busy = false; engine.stop(); engineActive = false; busy = false
+        activity = "已取消登录"; changed?()
     }
     func refresh() {
         guard !busy else { return }
         guard saved.logoutPending != true else { notice = "请先完成退出登录，再重新连接账号。"; return }
         busy = true; activity = "正在刷新联系人…"
         Task {
-            defer { busy = false; engine.stop(); engineActive = false; activity = "一切就绪"; changed?() }
+            defer { engine.busy = false; busy = false; engine.stop(); engineActive = false; activity = "一切就绪"; changed?() }
             do {
-                try engine.start(show: false); engineActive = true
+                try engine.start(show: false); engineActive = true; engine.busy = true
                 let account = try await engine.accountInfo()
-                let contacts = try await engine.scan()
-                try commit { state in
-                    if state.account?.uid != account.uid { state.selected = []; state.plan.enabled = false; state.plan.lastScheduledDay = nil }
-                    state.account = account; state.contacts = contacts
-                    state.selected.formIntersection(Set(contacts.map(\.id)))
-                }
-                log("联系人已更新：\(contacts.count) 个会话。")
+                try await synchronizeContacts(account: account)
             } catch { notice = error.localizedDescription; log("刷新失败：\(error.localizedDescription)") }
+        }
+    }
+    func synchronizeContacts(account: AccountInfo) async throws {
+        try Task.checkCancellation()
+        // Bind the account before scanning. Failed scans must never leave a
+        // previous account's recipients or armed plan attached to a new login.
+        try commit { state in
+            state.rememberCurrentSelection()
+            if state.account?.uid != account.uid {
+                state.selected = []; state.contacts = []
+                state.plan.enabled = false; state.plan.enabledSince = nil; state.plan.lastScheduledDay = nil
+            }
+            state.account = account
+        }
+        let contacts = try await engine.scan()
+        try Task.checkCancellation()
+        let verified = try await engine.accountInfo()
+        guard verified.uid == account.uid else {
+            try commit { state in
+                state.rememberCurrentSelection()
+                state.account = nil; state.contacts = []; state.selected = []
+                state.plan.enabled = false; state.plan.enabledSince = nil
+            }
+            throw PrototypeError.message("读取期间账号发生变化，请重新登录或刷新联系人。")
+        }
+        try applyContacts(contacts, account: verified)
+        log("联系人已更新：\(contacts.count) 个会话，已恢复 \(saved.selected.count) 个选择。")
+    }
+    func applyContacts(_ contacts: [Contact], account: AccountInfo) throws {
+        try commit { state in
+            state.rememberCurrentSelection()
+            let wanted = state.selectionsByAccount?[account.uid] ?? (state.account?.uid == account.uid ? state.selected : [])
+            if state.account?.uid != account.uid {
+                state.plan.enabled = false; state.plan.enabledSince = nil; state.plan.lastScheduledDay = nil
+            }
+            state.account = account; state.contacts = contacts
+            if state.selectionsByAccount == nil { state.selectionsByAccount = [:] }
+            state.selectionsByAccount?[account.uid] = wanted
+            state.selected = wanted.intersection(Set(contacts.map(\.id)))
         }
     }
     func logout() async {
@@ -216,6 +309,7 @@ final class SparkyModel: ObservableObject {
             // Persist the intention first. On interruption the next launch
             // resumes clearing before any login or scheduled send is allowed.
             try commit { state in
+                state.rememberCurrentSelection()
                 state.logoutPending = true
                 state.plan.enabled = false; state.plan.enabledSince = nil
                 state.account = nil; state.contacts = []; state.selected = []
