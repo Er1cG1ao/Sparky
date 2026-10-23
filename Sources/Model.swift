@@ -252,21 +252,30 @@ final class SparkyModel: ObservableObject {
                 let record = records[index]
                 activity = "\(index+1)/\(targets.count) · \(contact.title)"
                 var dispatched = false
+                let contactStart = ContinuousClock.now
                 do {
                     try updateRecord(record.id, state: .preparing, detail: "正在定位联系人、核对草稿")
                     try await engine.prepare(contact, text: text)
+                    let preparedAt=ContinuousClock.now
+                    var dispatchAt=preparedAt
                     if cancelRequested { break }
                     let result = try await engine.send(contact, text: text, beforeDispatch: {
                         try self.updateRecord(record.id, state: .sending, detail: "已记录发送意图，正在触发一次发送")
                         dispatched = true
+                        dispatchAt = .now
                     })
                     try updateRecord(record.id, state: result.state, detail: result.detail, messageID: result.messageID)
+                    func seconds(_ duration:Duration) -> String {
+                        let c=duration.components
+                        return String(format:"%.2f",Double(c.seconds)+Double(c.attoseconds)/1e18)
+                    }
+                    log("\(result.state.label) · 准备 \(seconds(contactStart.duration(to:preparedAt)))s · 排队 \(seconds(preparedAt.duration(to:dispatchAt)))s · 回执 \(seconds(dispatchAt.duration(to:.now)))s")
                 } catch {
                     do { try updateRecord(record.id, state: dispatched ? .uncertain : .failed, detail: error.localizedDescription) }
                     catch { throw PrototypeError.message("记录写入失败，已停止后续发送。请检查磁盘权限和历史记录。") }
                 }
                 progress = index + 1
-                if index + 1 < targets.count { try await engine.pause(testing ? 0.05 : 1.2) }
+                // The engine spaces actual dispatches; slow confirmations do not incur an extra cooldown.
             }
         } catch { fatal = error.localizedDescription; notice = fatal; log("任务中断：\(fatal!)") }
         do {

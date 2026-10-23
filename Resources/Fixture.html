@@ -1,8 +1,9 @@
 <!doctype html><meta charset="utf-8"><title>离线 WebKit 测试</title>
+<meta http-equiv="Content-Security-Policy" content="img-src 'none'; connect-src 'none'">
 <style>.conversationConversationListwrapper{height:200px;overflow:auto}.conversationConversationItemcurConversation{background:#eee}</style>
 <div class="conversationConversationListwrapper">
- <div data-e2e="conversation-item"><span class="conversationConversationItemtitle">离线联系人 A</span></div>
- <div data-e2e="conversation-item"><span class="conversationConversationItemtitle">离线联系人 B</span></div>
+ <div data-e2e="conversation-item"><img class="avatar" src="https://p3-pc.douyinpic.com/fixture-a.png"><span class="conversationConversationItemtitle">离线联系人 A</span></div>
+ <div data-e2e="conversation-item"><img class="avatar" src="http://127.0.0.1/private-avatar"><span class="conversationConversationItemtitle">离线联系人 B</span></div>
 </div>
 <div data-e2e="msg-input"><div class="public-DraftEditor-content" contenteditable="true"></div></div>
 <svg width="80" height="30" class="messageMsgInputpublishBtn" data-e2e="msg-send"><text y="20">离线发送</text></svg>

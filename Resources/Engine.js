@@ -2,7 +2,7 @@
 // DOM primitives in selectors.json are adapted from DouYinSparkFlow (MIT).
 (() => {
   if (window.__sparkPrototype) return;
-  const state = {profile: null, receipts: [], captureErrors: 0, requestSerial: 0, attempts: new Map()};
+  const state = {profile: null, receipts: [], captureErrors: 0, requestSerial: 0, attempts: new Map(), editorSerial: 0, editorIDs: new WeakMap()};
   const clean = value => String(value ?? '').replace(/\u00a0/g, ' ').trim();
   // Draft.js can insert U+200B as an editor-edge placeholder. Keep meaningful
   // internal characters and whitespace; normalize only presentation boundaries.
@@ -54,9 +54,14 @@
   }
   function convOf(el){for(const key of Object.keys(el)){if(key.startsWith('__reactProps$')&&el[key]?.conversation)return el[key].conversation;
     if(key.startsWith('__reactFiber$')){let f=el[key];for(let i=0;f&&i<35;i++,f=f.return){if(f.memoizedProps?.conversation)return f.memoizedProps.conversation;}}}return null;}
+  function avatarOf(el,c){
+    const image=el.querySelector('[class*="avatar"] img, img[class*="avatar"], img');
+    const candidates=[image?.currentSrc,image?.getAttribute('src'),image?.getAttribute('data-src'),c?.avatarUrl,c?.avatar_url,c?.icon];
+    for(const raw of candidates){if(typeof raw!=='string'||!raw)continue;try{const u=new URL(raw,location.href);if(u.protocol==='https:')return u.href;}catch{}}return null;
+  }
   function rows(){return [...document.querySelectorAll('[data-e2e="conversation-item"]')].map((el,index)=>{
     const c=convOf(el);let group=false;try{group=Number(c?.type)===2||Number(c?.participantCount)>2;}catch{}
-    return {id:clean(c?.id||c?.conversationId),title:clean(el.querySelector('.conversationConversationItemtitle')?.textContent)||`会话 ${index+1}`,group,index};});}
+    return {id:clean(c?.id||c?.conversationId),title:clean(el.querySelector('.conversationConversationItemtitle')?.textContent)||`会话 ${index+1}`,group,index,avatarURL:avatarOf(el,c)};});}
   function current(){const el=document.querySelector('.conversationConversationItemcurConversation');if(!el)return null;const c=convOf(el);return {id:clean(c?.id||c?.conversationId),title:clean(el.querySelector('.conversationConversationItemtitle')?.textContent)};}
   function editor(){return document.querySelector('[data-e2e="msg-input"] .public-DraftEditor-content, .DraftEditor-root [contenteditable="true"], [data-e2e="msg-input"] [contenteditable="true"]');}
   function status(){const login=!!document.querySelector('[data-e2e="login-container"]'),chat=!!document.querySelector('.conversationConversationListwrapper, [data-e2e="msg-input"]');
@@ -68,9 +73,11 @@
     return {found:true,before,top:el.scrollTop,bottom:el.scrollTop+el.clientHeight>=el.scrollHeight-2};}
   function draftState(){const ed=editor();return {exists:!!ed,text:ed?.textContent||'',current:current()};}
   function inspectDraft(id,text){const ed=editor(),raw=ed?.textContent||'',actual=messageText(raw),expected=messageText(text),cur=current();
+    if(ed&&!state.editorIDs.has(ed))state.editorIDs.set(ed,++state.editorSerial);
+    const signature=JSON.stringify([cur?.id,state.editorIDs.get(ed),raw]);
     const a=Array.from(actual),b=Array.from(expected);let index=0;while(index<a.length&&index<b.length&&a[index]===b[index])index++;
     const code=c=>c===undefined?'END':'U+'+c.codePointAt(0).toString(16).toUpperCase().padStart(4,'0');
-    return {exists:!!ed,empty:actual==='',identityMatches:cur?.id===id,matches:!!ed&&cur?.id===id&&actual===expected,
+    return {signature,exists:!!ed,empty:actual==='',identityMatches:cur?.id===id,matches:!!ed&&cur?.id===id&&actual===expected,
       actualLength:a.length,expectedLength:b.length,rawLength:Array.from(raw).length,
       difference:actual===expected?'none':`index=${index}, webpage=${code(a[index])}, expected=${code(b[index])}`};}
   function sendButton(){

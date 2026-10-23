@@ -6,6 +6,7 @@ struct Contact: Hashable, Codable, Identifiable {
     let id: String
     let title: String
     let group: Bool
+    var avatarURL: String? = nil
 }
 
 struct Delivery {
@@ -26,6 +27,7 @@ final class BrowserEngine: NSObject, WKNavigationDelegate, WKUIDelegate, NSWindo
     var log: (String) -> Void = { _ in }
     var busy = false
     var draft: (id: String, text: String)?
+    private var lastDispatch: ContinuousClock.Instant?
     let selfTest: Bool
     let resourceURL: URL
     var selectors: [String: String] = [:]
@@ -143,7 +145,7 @@ final class BrowserEngine: NSObject, WKNavigationDelegate, WKUIDelegate, NSWindo
             for row in rows {
                 guard let id = row["id"] as? String, !id.isEmpty else { continue }
                 if found[id] == nil { order.append(id) }
-                found[id] = Contact(id: id, title: row["title"] as? String ?? id, group: row["group"] as? Bool ?? false)
+                found[id] = Contact(id: id, title: row["title"] as? String ?? id, group: row["group"] as? Bool ?? false, avatarURL: AvatarURLPolicy.url(row["avatarURL"] as? String)?.absoluteString ?? found[id]?.avatarURL)
             }
             let position = try await call("scroll") as? [String: Any] ?? [:]
             if position["found"] as? Bool != true { break }
@@ -155,29 +157,58 @@ final class BrowserEngine: NSObject, WKNavigationDelegate, WKUIDelegate, NSWindo
         _ = try await call("scroll", [true])
         let contacts = order.compactMap { found[$0] }
         if contacts.isEmpty { throw PrototypeError.message("没有读取到带会话 ID 的联系人，请检查登录状态或网页是否已变化。") }
-        log("已读取 \(contacts.count) 个会话。折叠/陌生人列表可能未包含在内。")
+        log("已读取 \(contacts.count) 个会话，其中 \(contacts.filter { $0.avatarURL != nil }.count) 个有头像地址。折叠/陌生人列表可能未包含在内。")
         return contacts
     }
 
+    private func confirmSelection(_ contact: Contact) async throws {
+        for _ in 0..<40 {
+            if let state = try await call("inspectDraft", [contact.id, ""]) as? [String: Any],
+               state["identityMatches"] as? Bool == true, state["exists"] as? Bool == true { return }
+            try await pause(0.05)
+        }
+        throw PrototypeError.message("切换会话后输入框未就绪，未发送。请在网页检查该联系人。")
+    }
+
     func select(_ contact: Contact) async throws {
-        if let current = try await call("current") as? [String: Any], current["id"] as? String == contact.id { return }
+        if let current = try await call("current") as? [String: Any], current["id"] as? String == contact.id {
+            try await confirmSelection(contact); return
+        }
+        // Most adjacent targets are already mounted. Avoid scrolling to the top
+        // and scanning the same rows again for every recipient.
+        if try await call("select", [contact.id]) as? Bool == true {
+            try await confirmSelection(contact); return
+        }
         _ = try await call("scroll", [true])
-        try await pause(0.3)
+        try await pause(0.15)
         var idle = 0
         for _ in 0..<160 {
             if try await call("select", [contact.id]) as? Bool == true {
-                for _ in 0..<15 {
-                    try await pause(0.15)
-                    if let current = try await call("current") as? [String: Any], current["id"] as? String == contact.id { return }
-                }
-                throw PrototypeError.message("点击会话后身份未确认，已停止。可以在网页手动选中该联系人后重试。")
+                try await confirmSelection(contact); return
             }
             let position = try await call("scroll") as? [String: Any] ?? [:]
             idle = position["bottom"] as? Bool == true ? idle + 1 : 0
             if idle >= 5 { break }
-            try await pause(0.3)
+            try await pause(0.15)
         }
         throw PrototypeError.message("找不到选定会话，请刷新联系人列表。")
+    }
+
+    private func settledDraft(_ contact: Contact, text: String) async throws -> [String: Any] {
+        // Let the conversation/editor transition settle, then require two
+        // consecutive stable observations instead of guessing with a long sleep.
+        try await pause(0.4)
+        var previous: String?
+        for _ in 0..<30 {
+            let state = try await call("inspectDraft", [contact.id,text]) as? [String:Any] ?? [:]
+            guard state["identityMatches"] as? Bool == true else { throw PrototypeError.message("收件人已变化，未发送。") }
+            if state["exists"] as? Bool == true, let signature=state["signature"] as? String {
+                if previous == signature { return state }
+                previous = signature
+            } else { previous = nil }
+            try await pause(0.06)
+        }
+        throw PrototypeError.message("输入框仍在变化，未写入或发送。")
     }
 
     func prepare(_ contact: Contact, text: String) async throws {
@@ -186,8 +217,7 @@ final class BrowserEngine: NSObject, WKNavigationDelegate, WKUIDelegate, NSWindo
             throw PrototypeError.message("请输入 1–500 个字符的单行消息。")
         }
         try await select(contact)
-        try await pause(0.4)
-        guard let state = try await call("inspectDraft", [contact.id,text]) as? [String: Any], state["exists"] as? Bool == true else { throw PrototypeError.message("找不到输入框") }
+        let state = try await settledDraft(contact, text: text)
         if state["empty"] as? Bool == false && state["matches"] as? Bool == true {
             draft = (contact.id, text)
             log("已有相同草稿，会话和内容已重新核对；未重复写入，也未发送。")
@@ -199,10 +229,14 @@ final class BrowserEngine: NSObject, WKNavigationDelegate, WKUIDelegate, NSWindo
         guard let inputScript = selectors["JS_TYPE_LINE"] else { throw PrototypeError.message("缺少输入脚本") }
         let argument = try json(["text": text, "enter": false] as [String: Any])
         _ = try await evaluate("(\(inputScript))(\(argument))")
-        try await pause(0.6)
-        guard let after = try await call("inspectDraft", [contact.id,text]) as? [String: Any], after["matches"] as? Bool == true else {
-            throw PrototypeError.message("WebKit 输入验证失败，未发送。可显示网页检查草稿。")
+        var verified = false
+        for _ in 0..<30 {
+            try await pause(0.05)
+            let after = try await call("inspectDraft", [contact.id,text]) as? [String:Any] ?? [:]
+            guard after["identityMatches"] as? Bool == true else { throw PrototypeError.message("写入期间收件人已变化，未发送。") }
+            if after["matches"] as? Bool == true { verified = true; break }
         }
+        guard verified else { throw PrototypeError.message("WebKit 输入验证失败，未发送。可显示网页检查草稿。") }
         draft = (contact.id, text)
         log("草稿已写入并核对会话身份；尚未发送。")
     }
@@ -211,23 +245,33 @@ final class BrowserEngine: NSObject, WKNavigationDelegate, WKUIDelegate, NSWindo
         guard let prepared = draft, prepared.id == contact.id, prepared.text == text else {
             throw PrototypeError.message("请先为当前联系人和内容写入草稿，再点击发送。")
         }
+        if !selfTest, let previous = lastDispatch {
+            let elapsed = previous.duration(to: .now)
+            if elapsed < .seconds(1) { try await Task.sleep(for: .seconds(1) - elapsed) }
+        }
         let inspection = try await call("inspectDraft", [contact.id, text]) as? [String: Any] ?? [:]
         guard inspection["matches"] as? Bool == true else { throw PrototypeError.message("草稿或收件人已变化，未点击发送。") }
         let button = try await call("sendDiagnostic") as? [String: Any] ?? [:]
         guard button["found"] as? Bool == true, button["disabled"] as? Bool != true else { throw PrototypeError.message("发送按钮尚未就绪，未点击发送。") }
         try beforeDispatch() // Persist dispatch intent before a potentially irreversible click.
         draft = nil
-        guard let ticket = try await call("send", [contact.id, text]) as? [String: Any], ticket["token"] as? String != nil else {
+        let response:Any?
+        do { response = try await call("send", [contact.id,text]); lastDispatch = .now }
+        catch { lastDispatch = .now; throw error }
+        guard let ticket = response as? [String:Any], ticket["token"] as? String != nil else {
             throw PrototypeError.message("发送按钮没有返回结果，请手动检查聊天记录，不要立即重试。")
         }
         var domSeen = false
-        for _ in 0..<40 {
-            try await pause(0.3)
+        let deadline = ContinuousClock.now.advanced(by: .seconds(12))
+        var checks = 0
+        while ContinuousClock.now < deadline {
             let proof = try await call("proof", [contact.id, text, ticket]) as? [String: Any] ?? [:]
             if proof["state"] as? String == "ack" { return Delivery(state: .confirmed, detail: "服务器已确认发送；不代表对方已读或火花已更新。", messageID: (proof["receipt"] as? [String: Any])?["messageID"] as? String ?? "") }
             if proof["state"] as? String == "rejected" { return Delivery(state: .rejected, detail: "服务器拒绝本次发送。不会自动重试。") }
             if proof["state"] as? String == "changed" { throw PrototypeError.message("发送后会话发生变化，结果待确认。不会自动重试。") }
             if proof["domSeen"] as? Bool == true { domSeen = true }
+            checks += 1
+            try await pause(checks < 12 ? 0.08 : 0.3)
         }
         return Delivery(state: domSeen ? .pageOnly : .uncertain, detail: domSeen ? "页面出现新发出的对应消息，未捕获服务器回执。请用手机核实。" : "已执行发送，但未确认结果；不会自动重试。")
     }

@@ -6,6 +6,7 @@ enum SelfTests {
     static func check(_ condition: Bool, _ message: String) throws { if !condition { throw PrototypeError.message(message) }; print("PASS: \(message)") }
     static func run(_ model: SparkyModel) async throws {
         DispatchQueue.main.asyncAfter(deadline:.now()+100) { fputs("FAIL: test timeout\n",stderr); exit(1) }
+        try await AvatarTests.run()
         var calendar = Calendar(identifier:.gregorian); calendar.timeZone = TimeZone(identifier:"America/New_York")!
         func date(_ value:String) -> Date { let f=ISO8601DateFormatter(); return f.date(from:value)! }
         let morning = date("2026-10-23T12:00:00Z"), due=date("2026-10-23T13:00:00Z"), late=date("2026-10-23T20:00:00Z")
@@ -27,7 +28,9 @@ enum SelfTests {
         let contacts=try await e.scan()
         try check(account.uid=="123456789" && contacts.count==2,"hidden WebKit reads account and two exact IDs")
         try check(!e.trustedURL(URL(string:"https://www.douyin.com.evil.invalid/chat")),"untrusted origin refused")
+        try check(contacts[0].avatarURL == "https://p3-pc.douyinpic.com/fixture-a.png" && contacts[1].avatarURL == nil,"scan extracts each avatar and filters unsafe URLs")
         let a=contacts[0], b=contacts[1], text="离线测试 🔥"
+        _ = try await e.evaluate("window.fixtureScrolls=0;const scroller=document.querySelector('.conversationConversationListwrapper');const scroll=scroller.scrollTo.bind(scroller);scroller.scrollTo=(...args)=>{window.fixtureScrolls++;return scroll(...args)};true")
         try await e.prepare(a,text:text)
         _ = try await e.evaluate("document.querySelector('[contenteditable]').textContent='\\u200B离线测试 🔥\\u200B'")
         try await e.prepare(a,text:text)
@@ -43,6 +46,16 @@ enum SelfTests {
         try check(delivery.state == .confirmed && once==1,"SVG send fires exactly once and receives server ACK")
         var duplicate=false; do { _ = try await e.send(a,text:text) } catch { duplicate=true }
         try check(duplicate,"a consumed draft cannot be sent twice")
+        let scrolls=try await e.evaluate("window.fixtureScrolls") as? Int
+        try check(scrolls == 0,"visible recipients are selected without resetting or rescanning the list")
+        let originalInput=e.selectors["JS_TYPE_LINE"]!
+        e.selectors["JS_TYPE_LINE"]="(p)=>{setTimeout(()=>{document.querySelector('[contenteditable]').textContent=p.text},900);return true}"
+        try await e.prepare(b,text:text)
+        let delayed=try await e.call("inspectDraft",[b.id,text]) as? [String:Any]
+        try check(delayed?["matches"] as? Bool == true,"adaptive input verification waits for a delayed editor update")
+        e.selectors["JS_TYPE_LINE"]=originalInput
+        _ = try await e.evaluate("document.querySelector('[contenteditable]').textContent='';true")
+        try await e.select(a)
         // Previous receipts and an existing identical bubble cannot prove a new send.
         _ = try await e.evaluate("window.fetch=async()=>new Response(new Uint8Array());document.querySelector('[data-e2e=msg-send]').onclick=()=>{document.querySelector('[contenteditable]').textContent='';window.fixtureSent++};true")
         try await e.prepare(a,text:text)
@@ -67,7 +80,9 @@ enum SelfTests {
         try model.commit { s in s.account=account; s.contacts=contacts; s.selected=Set(contacts.map(\.id)); s.message=text }
         let loaded=try model.store.load()
         try check(loaded.selected.count==2 && loaded.message==text,"multi-selection and message survive store roundtrip")
+        let batchStart=ContinuousClock.now
         await model.runBatch(scheduled:false)
+        print("BENCHMARK: two offline contacts = \(batchStart.duration(to:.now)); excludes real network delays")
         let afterBatch=model.saved.history.count
         await model.runBatch(scheduled:true)
         try check(model.saved.history.count==afterBatch,"queued scheduler rechecks disabled or consumed plan")
