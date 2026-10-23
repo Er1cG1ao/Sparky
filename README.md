@@ -1,93 +1,68 @@
+<p align="center">
+  <img src="Assets/AppIcon.png" width="128" alt="Sparky app icon">
+</p>
+
 # Sparky
 
-轻量的原生 macOS 菜单栏应用，自动完成抖音聊天续火花。使用系统 WebKit，按需启动，任务结束后释放网页。
+**Keep your Douyin connections glowing.**
 
-支持 Apple Silicon Mac，macOS 14 或更新版本。无需 Chromium、Python 或额外后台服务。
+A lightweight macOS menu bar app for sending a daily message to your chosen Douyin conversations. Sign in, pick your friends, and set a time. Sparky uses the system WebKit engine when needed and releases the page after each task.
 
-## 功能
+**English** · [简体中文](README.zh-CN.md)
 
-- 搜索、多选已有聊天会话，支持私聊和群聊；同步网页头像并缓存缩略图。
-- 自定义单行消息，每日定时或手动批量发送。
-- 逐人记录服务器确认、页面确认和待确认结果。
-- 发送前核对账号、会话身份及草稿；不覆盖不同内容的已有草稿。
-- 任务中断后保留记录，不自动重放；可停止后续发送。
-- 主窗口打开时显示 Dock 图标并支持 ⌘Tab 切换；点击关闭或按 ⌘W 后隐藏 Dock 图标，留在菜单栏。
-- 侧栏整行均可点击，可选登录 Mac 时启动。
-- 登录成功自动收起网页窗口、抓取联系人，完成后释放引擎；可关闭登录窗口或点击“取消登录”中止等待。
-- 抓取时等待会话昵称与头像地址稳定，资料未加载完整时自动补读一次；失败时不替换原列表。
-- 按抖音账号分别记住已选会话，退出及重启后保留；重新登录并刷新列表后自动恢复。
-- 设置页和左下角账号旁均可退出登录，支持退出中断后的自动清理。
+[Download](https://github.com/Er1cG1ao/Sparky/releases) · [User guide](Docs/TUTORIAL.md) · [Development](Docs/DEVELOPMENT.md) · [Report an issue](https://github.com/Er1cG1ao/Sparky/issues)
 
-## 使用
+## What it does
 
-1. 从 [Releases](https://github.com/Er1cG1ao/Sparky/releases) 下载 DMG，打开后将 `Sparky.app` 移到“应用程序”并打开。升级时先退出旧 Spark / Spark WebKit Prototype，避免同时运行。
-2. 在“设置”打开登录窗口，完成扫码登录后，窗口自动收起并读取联系人，无需手动刷新。等待登录最长 5 分钟，超时可重新打开。
-3. 在“联系人”勾选要发送的会话，在“发送计划”填写消息和每日时间。
-4. 用自己的测试会话执行一次“立即执行…”，核对实际结果后开启定时。
+- **Choose your conversations:** search and select existing private or group chats, with cached profile pictures.
+- **Remember each account:** keep separate selections for each Douyin account, including across sign-outs and restarts.
+- **Finish signing in automatically:** hide the chat window after successful login, read contacts in the background, then release the engine.
+- **Send on your schedule:** configure a message and daily time, or review and start a batch manually.
+- **Show the evidence:** record server confirmation, page confirmation, rejection, or an uncertain result for each recipient.
+- **Stay in the menu bar:** open the main window for a Dock icon and ⌘Tab access; close it with ⌘W to return to menu bar mode.
 
-定时按 Mac 当前时区执行。应用必须保持运行，休眠时不会唤醒电脑；唤醒后只补当日尚未执行的任务。开启或修改时间时，今天已错过的时间从明天开始。
+Built with Swift, SwiftUI and AppKit. No bundled Chromium, Python runtime or separate background service. These docs are available in English and Simplified Chinese; the app interface currently uses Simplified Chinese.
 
-手动执行也占用当天的自动任务名额，避免再次自动发送。主动再次手动确认仍可发送新一批。任务过程中暂停后续发送会等待当前会话结束。每个会话只触发一次发送，不自动重试。
+## Install and start
 
-发送仍使用一个 WebKit 聊天页串行执行，优先定位当前可见联系人，按输入框实际就绪状态核对草稿。保留会话切换稳定期，实际点击之间至少间隔 1 秒；网络确认耗时较长时不叠加固定冷却。服务器回执仍最多等待约 12 秒，不为提速降低确认标准。
+Requires **Apple Silicon (M-series), macOS 14 or later**. Intel installers are not currently provided.
 
-在设置页或左下角用户名旁点击“退出登录”，会清除本应用的网页登录状态及当前联系人，并暂停定时；各账号的好友选择、消息模板和发送记录保留。不影响手机或 Safari 的登录。操作进行中不可退出登录。退出中途发生中断时，下次启动会继续清理，完成前不允许重新连接或发送。
+1. Download the DMG from **Assets** on the [Releases page](https://github.com/Er1cG1ao/Sparky/releases), including releases marked **Pre-release**.
+2. Quit any older Spark / Sparky instance, open the DMG, and drag `Sparky.app` into **Applications**.
+3. In Settings (`设置`), open the login window and sign in to Douyin. The window hides automatically while contacts are read.
+4. Select conversations under Contacts (`联系人`), then set your message and time under Send Plan (`发送计划`).
+5. Try **Run now…** (`立即执行…`) with your own test conversation and check the actual chat before enabling the daily plan.
 
-联系人读取会等待每屏资料稳定后再滚动，昵称缺失或数字占位且无头像时继续等待，超时会自动从头补读一次。头像地址有独立等待时间，不要求图片下载成功；有昵称但没有可下载头像的会话仍可正常读取。两次读取后资料仍不完整会提示失败，保留同账号已有联系人及选择；整个扫描等待有时间上限，不会无限重试。
+Keep Sparky running. Closing the main window leaves it in the menu bar; quitting stops scheduling. The Mac must be awake to send. See the [guide](Docs/TUTORIAL.md) for wake-up behavior, account switching and delivery results.
 
-升级后点击“刷新账号与联系人”同步头像地址。头像按需加载并缓存，加载失败时显示姓名首字或群聊占位图，不影响发送。
+Builds use ad hoc signing and are **not Apple-notarized**. If macOS blocks first launch, verify the download source and allow the app in **Privacy & Security**. Disabling system security protections is not required.
 
-消息限单行、最多 500 个 UTF-16 字符。列表来自已有聊天会话，可能不包含折叠或陌生人会话。登录成功后自动刷新联系人，也可手动刷新。选择按稳定的抖音账号 UID 和会话 ID 保存；不同账号互不混用。只恢复本次读取到的会话，暂未读取到的会话仍保留在该账号的记忆中，后续读取到时再恢复；主动取消勾选或取消全选会同步更新记忆。升级时会迁移当前账号已有选择；旧版退出时已经清除的选择无法恢复。退出登录或切换账号后定时计划保持关闭，需手动开启。
+## Scope and privacy
 
-## 结果说明
+- Works with **Douyin**, through its web chat. Existing conversations are supported; folded or stranger conversations may be missing from the list.
+- Messages are sent one recipient at a time. A successful send does **not** guarantee delivery, a reply, or a renewed streak. Uncertain sends are not automatically retried.
+- Login uses the app's WebKit website store. Signing out clears that session and pauses the plan; phone and Safari sessions are unaffected.
+- Account selections, message settings and recent send metadata stay on your Mac. Web chat connects to Douyin; avatars load from supported Douyin/ByteDance HTTPS CDNs without login cookies. Sparky has no separate upload server.
+- Site changes or restrictions can interrupt login, contact reading or sending. This project is not affiliated with Douyin. See [data storage and limitations](Docs/TUTORIAL.md#local-data-and-privacy).
 
-| 状态 | 含义 |
-| --- | --- |
-| 服务器确认 | 点击之后发起的发送请求获得成功回执，不代表已读或火花已更新。 |
-| 页面确认 | 页面出现新的对应自发消息，输入框清空，但未获取服务器回执。 |
-| 结果待确认 | 可能已发出，缺少可靠证据或发送阶段发生中断。请自行核实。 |
-| 服务器拒绝 | 发送接口返回拒绝结果，不自动重试。 |
-| 未发送 / 已取消 | 尚未触发发送，或用户停止了后续任务。 |
+## Build from source
 
-回执关联依据为当前网页中的请求时序，不能提供端到端送达保证。页面确认和待确认结果应先用手机核实，再决定是否手动重发。
-
-## 构建与测试
-
-安装 Apple Command Line Tools，在项目根目录运行：
+Install current Apple Command Line Tools or Xcode, then run:
 
 ```sh
+git clone https://github.com/Er1cG1ao/Sparky.git
+cd Sparky
 ./build.sh
-open /tmp/sparky-build/Sparky.app
 ```
 
-打包为包含“应用程序”快捷方式的 DMG：
+Output: `/tmp/sparky-build/Sparky.app`. The script targets Apple Silicon; building does not install or publish the app. Packaging, offline tests and source layout are documented in [Development](Docs/DEVELOPMENT.md).
 
-```sh
-./package-dmg.sh
-```
+## Help and contribute
 
-产物位于 `dist/`。
+For bugs and suggestions, open an [Issue](https://github.com/Er1cG1ao/Sparky/issues) with your Sparky version, macOS version, reproduction steps, and expected versus actual behavior. Remove account identifiers, private messages and other personal information from logs or screenshots. Never upload login cookies.
 
-离线测试不登录抖音、不发送真实消息：
+[English guide](Docs/TUTORIAL.md) · [中文教程](Docs/TUTORIAL.zh-CN.md) · [Development](Docs/DEVELOPMENT.md)
 
-```sh
-/tmp/sparky-build/Sparky.app/Contents/MacOS/Sparky --self-test
-```
+## License and origins
 
-测试覆盖昵称与头像延迟加载、虚拟滚动后续页面、补读上限及失败不覆盖旧资料、登录成功自动抓取、取消登录、账号选择迁移与隔离、退出重登恢复、部分列表恢复、联系人批量、定时及去重、夏令时、单次发送、收件人校验、回执与页面判断、记录持久化及异常恢复。原生窗口交互测试可用 `--window-self-test`，验证 ⌘W、Dock 模式切换及侧栏空白处点击；UI 烟雾测试可用 `--ui-smoke`。窗口测试仅使用演示数据。
-
-构建产物是本地 ad-hoc 签名，未经过 Apple 公证。首次打开如被系统拦截，可在“隐私与安全性”中允许此应用，不需要关闭系统安全保护。
-
-## 架构与数据
-
-`Sources/Views.swift` 为原生 SwiftUI 界面，`Model.swift` 管理计划和记录，`Engine.swift` 按需启动 WKWebView；`Resources/Engine.js` 在聊天页定位会话、触发发送并观察结果。
-
-设置与最近 2,000 条发送元数据记录保存在 `~/Library/Application Support/Spark/state.json`，包括各账号的会话选择，仅当前用户可读写。沿用旧目录及应用标识是为了保留升级兼容性。消息配置包含正文，历史记录不额外保存正文。登录由系统 WebKit 网站数据存储管理，不导出 Cookie。没有额外上传服务器或远程更新器。
-
-头像从网页提供的抖音/字节 CDN HTTPS 地址下载，不附带登录 Cookie，并限制跨站重定向；本机仅缓存缩略图，目录为 `~/Library/Caches/Sparky/Avatars`。不支持的地址显示占位图。缩略图缓存约保留最近 512 张，30 天后重新获取。
-
-请勿在 Issue 中上传登录 Cookie、账号数据或包含私人聊天的截图。网页结构和站点限制变化可能导致发送失败，请以实际聊天记录为准。本项目与抖音官方无关联。
-
-## License
-
-[MIT](LICENSE)。上游来源及系统图标说明见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
+[MIT](LICENSE). Sparky adapts the input primitive and conversation discovery concepts from [DouYinSparkFlow](https://github.com/2061360308/DouYinSparkFlow). Attribution and artwork details are in [Third-party notices](THIRD_PARTY_NOTICES.md). The app icon is drawn from the original paths in [`Tools/Icon.swift`](Tools/Icon.swift).
