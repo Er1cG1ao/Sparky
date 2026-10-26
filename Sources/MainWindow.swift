@@ -7,6 +7,8 @@ final class SparkyMainWindow: NSWindow {
     private var controlsInstalled = false
     private var positioningControls = false
     private var minimizing = false
+    private var heightZoomRestoreFrame: NSRect?
+    private var heightZoomTargetFrame: NSRect?
 
     func configureWindowRules() {
         collectionBehavior.remove([.fullScreenPrimary, .fullScreenAuxiliary, .fullScreenAllowsTiling])
@@ -14,7 +16,7 @@ final class SparkyMainWindow: NSWindow {
         contentMinSize = Self.minimumContentSize
         minSize = frameRect(forContentRect: NSRect(origin: .zero, size: Self.minimumContentSize)).size
         enforcesMinimum = true
-        if let zoom = standardWindowButton(.zoomButton) { zoom.isHidden = true; zoom.isEnabled = false }
+        configureHeightZoomControl()
     }
 
     func installWindowControls() {
@@ -28,12 +30,12 @@ final class SparkyMainWindow: NSWindow {
         positioningControls = true
         defer { positioningControls = false }
         contentView?.superview?.layoutSubtreeIfNeeded()
-        for (type, x) in [(NSWindow.ButtonType.closeButton, CGFloat(18)), (.miniaturizeButton, CGFloat(38))] {
+        for (type, x) in [(NSWindow.ButtonType.closeButton, CGFloat(18)), (.miniaturizeButton, CGFloat(38)), (.zoomButton, CGFloat(58))] {
             guard let button = standardWindowButton(type), let parent = button.superview else { continue }
             let point = parent.convert(NSPoint(x: x, y: frame.height - 18 - button.frame.height), from: nil)
             if abs(button.frame.minX - point.x) > 0.1 || abs(button.frame.minY - point.y) > 0.1 { button.setFrameOrigin(point) }
         }
-        if let zoom = standardWindowButton(.zoomButton) { zoom.isHidden = true; zoom.isEnabled = false }
+        configureHeightZoomControl()
     }
 
     func constrainedFrameSize(_ proposed: NSSize) -> NSSize {
@@ -71,8 +73,39 @@ final class SparkyMainWindow: NSWindow {
         minimizing = false
         positionWindowControls()
     }
+    private var isHeightZoomed: Bool {
+        guard heightZoomRestoreFrame != nil, let target = heightZoomTargetFrame else { return false }
+        return abs(frame.height - target.height) < 1
+    }
+    override var isZoomed: Bool { isHeightZoomed }
+
+    private func configureHeightZoomControl() {
+        guard let button = standardWindowButton(.zoomButton) else { return }
+        button.isHidden = false; button.isEnabled = true
+        button.target = self; button.action = #selector(NSWindow.performZoom(_:))
+        button.toolTip = isHeightZoomed ? "恢复窗口高度" : "拉高窗口"
+        button.setAccessibilityLabel(button.toolTip)
+    }
+
+    private func toggleHeightZoom() {
+        guard let workArea = screen?.visibleFrame,
+              workArea.height >= constrainedFrameSize(.zero).height else { return }
+        if isHeightZoomed, let previous = heightZoomRestoreFrame {
+            heightZoomRestoreFrame = nil; heightZoomTargetFrame = nil
+            var restored = frame
+            restored.size.height = min(previous.height, workArea.height)
+            restored.origin.y = min(max(previous.minY, workArea.minY), workArea.maxY - restored.height)
+            setFrame(restored, display: true)
+        } else {
+            heightZoomRestoreFrame = frame
+            var expanded = frame
+            expanded.origin.y = workArea.minY; expanded.size.height = workArea.height
+            heightZoomTargetFrame = expanded
+            setFrame(expanded, display: true)
+        }
+    }
     override func toggleFullScreen(_ sender: Any?) { }
-    override func zoom(_ sender: Any?) { }
-    override func performZoom(_ sender: Any?) { }
+    override func zoom(_ sender: Any?) { toggleHeightZoom() }
+    override func performZoom(_ sender: Any?) { toggleHeightZoom() }
 }
 

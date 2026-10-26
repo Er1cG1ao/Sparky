@@ -38,13 +38,16 @@ enum WindowTests {
         // their real hit target, then exercise the corresponding window action.
         if button === window.standardWindowButton(.miniaturizeButton) { window.miniaturize(nil) }
         else if button === window.standardWindowButton(.closeButton) { window.performClose(nil) }
+        else if button === window.standardWindowButton(.zoomButton), let action=button.action {
+            try SelfTests.check(NSApp.sendAction(action,to:button.target,from:button),"green control dispatches its configured height action")
+        }
         try await pause()
     }
     static func checkWindowControls(_ window:NSWindow) throws {
-        for type in [NSWindow.ButtonType.closeButton,.miniaturizeButton] {
+        for type in [NSWindow.ButtonType.closeButton,.miniaturizeButton,.zoomButton] {
             guard let button=window.standardWindowButton(type) else { throw PrototypeError.message("Native window button missing") }
             let frame=window.convertToScreen(button.convert(button.bounds,to:nil))
-            try SelfTests.check(abs(frame.minX-window.frame.minX-(type == .closeButton ? 18 : 38)) < 1 && abs(window.frame.maxY-frame.maxY-18) < 1,"native \(type == .closeButton ? "close" : "minimize") button keeps an 18-point corner inset")
+            try SelfTests.check(abs(frame.minX-window.frame.minX-(type == .closeButton ? 18 : type == .miniaturizeButton ? 38 : 58)) < 1 && abs(window.frame.maxY-frame.maxY-18) < 1,"native \(type == .closeButton ? "close" : type == .miniaturizeButton ? "minimize" : "height zoom") button keeps an 18-point corner inset")
         }
     }
     static func run(_ delegate:AppDelegate) async throws {
@@ -60,12 +63,26 @@ enum WindowTests {
         try SelfTests.check(window.isVisible && NSApp.activationPolicy() == .regular,"visible main window uses regular Dock application policy")
         try SelfTests.check(find(window,"account.logout.sidebar") != nil,"sidebar exposes logout beside the account name")
         try checkWindowControls(window)
-        try SelfTests.check(window.standardWindowButton(.zoomButton)?.isHidden == true && window.standardWindowButton(.zoomButton)?.isEnabled == false,"green zoom control is hidden and disabled")
+        try SelfTests.check(window.standardWindowButton(.zoomButton)?.isHidden == false && window.standardWindowButton(.zoomButton)?.isEnabled == true,"green height control is visible and enabled")
         try SelfTests.check(window.collectionBehavior.contains(.fullScreenNone) && window.collectionBehavior.contains(.fullScreenDisallowsTiling),"main window opts out of fullscreen and split-screen tiling")
         let originalFrame=window.frame
-        window.toggleFullScreen(nil); window.performZoom(nil); window.zoom(nil)
+        window.toggleFullScreen(nil)
         try await pause()
-        try SelfTests.check(!window.styleMask.contains(.fullScreen) && window.frame == originalFrame,"fullscreen and zoom actions cannot enlarge the main window")
+        try SelfTests.check(!window.styleMask.contains(.fullScreen) && window.frame == originalFrame,"fullscreen remains disabled")
+        guard let green=window.standardWindowButton(.zoomButton), let workArea=window.screen?.visibleFrame else { throw PrototypeError.message("Green control or work area missing") }
+        try await clickNative(window,button:green)
+        try SelfTests.check(abs(window.frame.minY-workArea.minY)<1 && abs(window.frame.maxY-workArea.maxY)<1 && window.frame.width==originalFrame.width && window.frame.minX==originalFrame.minX,"green control fills the usable screen height while preserving width and horizontal position")
+        try SelfTests.check(window.isZoomed && !window.styleMask.contains(.fullScreen) && green.toolTip == "恢复窗口高度","height zoom stays on the desktop and updates the green control label")
+        try checkWindowControls(window)
+        try await clickNative(window,button:green)
+        try SelfTests.check(window.frame==originalFrame && !window.isZoomed,"second green press restores the previous height and position")
+        window.performZoom(nil); window.zoom(nil)
+        try SelfTests.check(window.frame==originalFrame,"menu and native zoom actions use the same reversible height behavior")
+        window.setContentSize(NSSize(width:originalFrame.width,height:SparkyMainWindow.minimumContentSize.height))
+        let manuallyResized=window.frame
+        window.performZoom(nil); window.performZoom(nil)
+        try SelfTests.check(window.frame==manuallyResized,"height restore honors a manually resized normal window")
+        window.setFrame(originalFrame,display:true)
         window.setContentSize(NSSize(width:300,height:200))
         try await pause()
         try SelfTests.check(window.contentView!.bounds.width >= 940 && window.contentView!.bounds.height >= 760,"undersized content requests are clamped to the readable minimum")
@@ -89,7 +106,7 @@ enum WindowTests {
         try await pause()
         try SelfTests.check(window.toolbar == nil && window.titlebarAppearsTransparent && !window.isOpaque,"window uses a transparent title bar without an empty toolbar band")
         if let backdrop=sidebarBackdrop(window.contentView!) {
-            try SelfTests.check(backdrop.blendingMode == .behindWindow && backdrop.material == .sidebar && backdrop.alphaValue < 1,"sidebar uses a more transparent window backdrop without fading its controls")
+            try SelfTests.check(backdrop.blendingMode == .behindWindow && backdrop.material == .sidebar && backdrop.alphaValue == 1 && backdrop.state == .followsWindowActiveState,"sidebar uses standard system sidebar opacity and activation behavior")
         } else {
             try SelfTests.check(NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency,"a solid sidebar is used when reduced transparency is requested")
         }

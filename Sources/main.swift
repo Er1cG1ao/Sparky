@@ -42,6 +42,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             if preview {
                 window.appearance = NSAppearance(named: CommandLine.arguments.contains("--ui-dark") ? .darkAqua : .aqua)
                 if CommandLine.arguments.contains("--ui-compact") { window.setContentSize(SparkyMainWindow.minimumContentSize) }
+                if CommandLine.arguments.contains("--ui-tall") { window.performZoom(nil) }
                 if CommandLine.arguments.contains("--ui-empty") { try? model.commit { $0.account=nil; $0.contacts=[]; $0.selected=[]; $0.history=[]; $0.plan.enabled=false } }
                 if CommandLine.arguments.contains("--ui-stress") {
                     try? model.commit { state in
@@ -92,6 +93,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         editItem.submenu = editMenu; menu.addItem(editItem)
         let windowItem = NSMenuItem(); let windowMenu = NSMenu(title:"窗口")
         windowMenu.addItem(NSMenuItem(title:"最小化",action:#selector(NSWindow.performMiniaturize(_:)),keyEquivalent:"m"))
+        windowMenu.addItem(NSMenuItem(title:"拉高／恢复窗口",action:#selector(NSWindow.performZoom(_:)),keyEquivalent:""))
         windowItem.submenu = windowMenu; menu.addItem(windowItem)
         NSApp.mainMenu = menu; NSApp.windowsMenu = windowMenu
     }
@@ -110,7 +112,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     func windowWillResize(_ sender:NSWindow,to frameSize:NSSize) -> NSSize {
         (sender as? SparkyMainWindow)?.constrainedFrameSize(frameSize) ?? frameSize
     }
-    func windowShouldZoom(_ window:NSWindow,toFrame newFrame:NSRect) -> Bool { false }
     func windowWillClose(_ notification:Notification) {
         guard let closing = notification.object as? NSWindow, closing === window else { return }
         NSApp.setActivationPolicy(.accessory)

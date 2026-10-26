@@ -111,8 +111,8 @@ struct SidebarBackdrop: NSViewRepresentable {
         let view = NSVisualEffectView()
         view.material = .sidebar
         view.blendingMode = .behindWindow
-        view.state = .active
-        view.alphaValue = 0.88
+        view.state = .followsWindowActiveState
+        view.alphaValue = 1
         view.identifier = NSUserInterfaceItemIdentifier("sidebar.backdrop")
         return view
     }

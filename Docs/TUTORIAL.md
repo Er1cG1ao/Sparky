@@ -57,7 +57,7 @@ Settings are grouped into Account (`抖音账号`), General (`通用`) and Diagn
 
 The window uses two full-height columns without a separate toolbar band. Use the sidebar button beside the app name to collapse it into an icon rail; click it again to restore labels. Hover an icon to see its name. Account and sign-out actions remain available at the bottom, and the app remembers the sidebar preference across launches. The sidebar uses a translucent window backdrop, with a solid fallback when macOS requests reduced transparency.
 
-The native close and minimize buttons are inset from the rounded corner. The green zoom button is hidden, and the main window does not support fullscreen or zoom. Its minimum content size is 940 × 760 points, so the message, time, recipients and send button remain accessible; long lists still scroll.
+The native window buttons are inset from the rounded corner. The green button stretches the window to the usable screen height without changing its width; press it again to restore the previous height and position. It stays on the desktop and does not enter fullscreen. The sidebar uses the standard system sidebar material at normal effect opacity, following window activation. Its minimum content size is 940 × 760 points, so the message, time, recipients and send button remain accessible; long lists still scroll.
 
 The main window shows a Dock icon and supports ⌘Tab. Close it with the red close button or ⌘W to hide the Dock icon and keep the app in the menu bar. Open it again from the menu bar. Minimizing keeps the Dock icon.
 
