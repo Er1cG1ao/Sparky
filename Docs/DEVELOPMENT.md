@@ -41,7 +41,7 @@ Native window interaction tests:
 /tmp/sparky-build/Sparky.app/Contents/MacOS/Sparky --window-self-test
 ```
 
-These use demo data to verify ⌘W, Dock/menu bar mode changes and full-row sidebar/contact hit areas, selection persistence, search/filtering, review cancellation and compact empty-list layout. For a UI smoke check, use `--ui-smoke`; add `--ui-settings`, `--ui-contacts` or `--ui-history` to select a page. Add `--ui-dark`, `--ui-compact`, `--ui-empty`, `--ui-stress` or `--ui-loading` for appearance and layout checks. These modes use synthetic data only.
+These use demo data to verify ⌘W, Dock/menu bar mode changes and full-row sidebar/contact hit areas, selection persistence, search/filtering, review cancellation and compact empty-list layout, sidebar collapse/navigation, and the transparent title bar/backdrop. For a UI smoke check, use `--ui-smoke`; add `--ui-settings`, `--ui-contacts` or `--ui-history` to select a page. Add `--ui-dark`, `--ui-compact`, `--ui-collapsed`, `--ui-empty`, `--ui-stress` or `--ui-loading` for appearance and layout checks. These modes use synthetic data only.
 
 ## Source layout
 

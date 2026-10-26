@@ -1,6 +1,6 @@
 # Native interface design
 
-Sparky 0.3.0 applies the interface hierarchy and feedback principles in Emil Kowalski's [apple-design](https://github.com/emilkowalski/skills/blob/main/skills/apple-design/SKILL.md) and [emil-design-eng](https://github.com/emilkowalski/skills/blob/main/skills/emil-design-eng/SKILL.md). The references target the web; Sparky implements the relevant ideas in SwiftUI and AppKit without a web UI or an added animation library.
+Sparky applies the interface hierarchy and feedback principles in Emil Kowalski's [apple-design](https://github.com/emilkowalski/skills/blob/main/skills/apple-design/SKILL.md) and [emil-design-eng](https://github.com/emilkowalski/skills/blob/main/skills/emil-design-eng/SKILL.md). The references target the web; Sparky implements the relevant ideas in SwiftUI and AppKit without a web UI or an added animation library.
 
 | Before | After | Why |
 | --- | --- | --- |
@@ -14,7 +14,8 @@ Sparky 0.3.0 applies the interface hierarchy and feedback principles in Emil Kow
 ## Implementation rules
 
 - Use system type styles, native buttons, pickers, switches, sheets and disclosure controls. Keep Sparky orange for selection and the primary action; use semantic result colors with text labels.
-- Use a material only for structural chrome. The sidebar becomes solid when the system requests reduced transparency. Surface borders respond to increased contrast.
+- Use a material only for structural chrome. The full-height sidebar uses `NSVisualEffectView` with a behind-window sidebar material at 88% effect opacity; controls remain fully opaque. The sidebar becomes solid when the system requests reduced transparency. Surface borders respond to increased contrast.
+- The window has no empty toolbar band. A transparent title bar retains native controls, with reserved space above the sidebar header. The sidebar switches between 225-point labeled navigation and an 80-point icon rail, retaining labels for accessibility and hover help. Collapse is available during tasks and remembered in local UserDefaults; tests never modify the user's preference.
 - Press feedback is immediate. Only the pointer hover background has a short 120 ms interpolation; reduced motion disables it. Navigation and keyboard selection have no custom transition or stagger.
 - Keep the main action in a fixed footer. Empty states use the available content area rather than enlarging the window. Long names truncate without pushing selection controls out of view.
 - Preserve the separate send review, input validation and per-account preferences. Visual changes must not alter dispatch or receipt rules.

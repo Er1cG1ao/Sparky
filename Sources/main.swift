@@ -17,11 +17,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             if test { Task { do { if CommandLine.arguments.contains("--logout-only") { try await LogoutTests.run() } else if CommandLine.arguments.contains("--scan-only") { try await ContactScanTests.run() } else if CommandLine.arguments.contains("--login-only") { try await LoginTests.run() } else { try await SelfTests.run(model) }; print("PASS: all Sparky offline tests"); fflush(stdout); exit(0) } catch { fputs("FAIL: \(error)\n",stderr); exit(1) } }; return }
             if preview || windowTest { model.seedPreview() }
             window = NSWindow(contentRect:NSRect(x:0,y:0,width:1030,height:800),styleMask:[.titled,.closable,.miniaturizable,.resizable,.fullSizeContentView],backing:.buffered,defer:false)
-            window.title = "Sparky"; window.titleVisibility = .hidden; window.toolbar = NSToolbar(identifier:"SparkToolbar"); window.toolbarStyle = .unified; window.isReleasedWhenClosed = false; window.delegate = self
+            window.title = "Sparky"; window.titleVisibility = .hidden; window.toolbar = nil; window.titlebarAppearsTransparent = true; window.titlebarSeparatorStyle = .none; window.isOpaque = false; window.backgroundColor = .clear; window.isReleasedWhenClosed = false; window.delegate = self
             let viewModel = model!
             let hostingView = NSHostingView(rootView: GeometryReader { geometry in
                 SparkyView(model:viewModel).frame(width:geometry.size.width,height:geometry.size.height)
-            })
+            }.ignoresSafeArea(.container, edges: .top))
             hostingView.sizingOptions = []
             window.contentView = hostingView; window.minSize = NSSize(width:900,height:690); window.center()
             status = NSStatusBar.system.statusItem(withLength:NSStatusItem.squareLength)

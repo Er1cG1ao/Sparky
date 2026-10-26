@@ -55,6 +55,8 @@ Receipts are associated using request timing in the current page; they are not a
 
 Settings are grouped into Account (`抖音账号`), General (`通用`) and Diagnostics (`诊断`); expand Run log (`运行日志`) to inspect or copy diagnostic logs.
 
+The window uses two full-height columns without a separate toolbar band. Use the sidebar button beside the app name to collapse it into an icon rail; click it again to restore labels. Hover an icon to see its name. Account and sign-out actions remain available at the bottom, and the app remembers the sidebar preference across launches. The sidebar uses a translucent window backdrop, with a solid fallback when macOS requests reduced transparency.
+
 The main window shows a Dock icon and supports ⌘Tab. Close it with the red close button or ⌘W to hide the Dock icon and keep the app in the menu bar. Open it again from the menu bar. Minimizing keeps the Dock icon.
 
 To launch at login, first move Sparky into Applications, then enable the option in Settings. macOS may require approval in **System Settings → General → Login Items**. Quitting Sparky stops scheduling.
@@ -67,7 +69,7 @@ Settings, account selections and up to **2,000 send metadata records** are store
 ~/Library/Application Support/Spark/state.json
 ```
 
-The legacy directory and application identifier are retained for upgrade compatibility. The settings include the message template; individual history entries do not store an additional copy of the message body. The state file is writable and readable only by the current user. Login data is managed by WebKit; Sparky does not export login cookies or send data to a separate upload server.
+The legacy directory and application identifier are retained for upgrade compatibility. The settings include the message template; individual history entries do not store an additional copy of the message body. The state file is writable and readable only by the current user. The sidebar collapse preference is stored separately in macOS UserDefaults. Login data is managed by WebKit; Sparky does not export login cookies or send data to a separate upload server.
 
 Avatars download from supported Douyin/ByteDance HTTPS CDNs without login cookies, with restricted redirects. Only thumbnails are cached in:
 

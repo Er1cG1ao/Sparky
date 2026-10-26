@@ -104,3 +104,17 @@ struct SparkyRowStyle: ButtonStyle {
         }
     }
 }
+
+// A real window backdrop, rather than blurring an opaque in-window surface.
+struct SidebarBackdrop: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSVisualEffectView {
+        let view = NSVisualEffectView()
+        view.material = .sidebar
+        view.blendingMode = .behindWindow
+        view.state = .active
+        view.alphaValue = 0.88
+        view.identifier = NSUserInterfaceItemIdentifier("sidebar.backdrop")
+        return view
+    }
+    func updateNSView(_ view: NSVisualEffectView, context: Context) { }
+}

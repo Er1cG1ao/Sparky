@@ -14,6 +14,11 @@ enum WindowTests {
         }
         return nil
     }
+    static func sidebarBackdrop(_ root:NSView) -> NSVisualEffectView? {
+        if let backdrop=root as? NSVisualEffectView, backdrop.identifier?.rawValue == "sidebar.backdrop" { return backdrop }
+        for child in root.subviews { if let backdrop=sidebarBackdrop(child) { return backdrop } }
+        return nil
+    }
     static func pause() async throws { try await Task.sleep(nanoseconds:350_000_000) }
     static func click(_ window:NSWindow, id:String, fraction:CGFloat = 0.5) async throws {
         guard let element=find(window,id), let frame=(attribute(element,"accessibilityFrame") as? NSValue)?.rectValue else { throw PrototypeError.message("Missing clickable UI: \(id)") }
@@ -29,6 +34,35 @@ enum WindowTests {
         let window=delegate.window!, model=delegate.model!
         try SelfTests.check(window.isVisible && NSApp.activationPolicy() == .regular,"visible main window uses regular Dock application policy")
         try SelfTests.check(find(window,"account.logout.sidebar") != nil,"sidebar exposes logout beside the account name")
+        try SelfTests.check(window.toolbar == nil && window.titlebarAppearsTransparent && !window.isOpaque,"window uses a transparent title bar without an empty toolbar band")
+        if let backdrop=sidebarBackdrop(window.contentView!) {
+            try SelfTests.check(backdrop.blendingMode == .behindWindow && backdrop.material == .sidebar && backdrop.alphaValue < 1,"sidebar uses a more transparent window backdrop without fading its controls")
+        } else {
+            try SelfTests.check(NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency,"a solid sidebar is used when reduced transparency is requested")
+        }
+        guard let title=find(window,"page.title"), let titleFrame=(attribute(title,"accessibilityFrame") as? NSValue)?.rectValue else { throw PrototypeError.message("Page title missing") }
+        try SelfTests.check(window.frame.maxY-titleFrame.maxY < 65,"page content begins at the top without the old gray header band")
+        let selectionBeforeFold=model.saved.selected
+        let preferenceBefore=UserDefaults.standard.object(forKey:"Sparky.sidebarCollapsed") as? Bool
+        try await click(window,id:"sidebar.toggle")
+        guard let compactItem=find(window,"sidebar.联系人"), let compactFrame=(attribute(compactItem,"accessibilityFrame") as? NSValue)?.rectValue else { throw PrototypeError.message("Collapsed navigation missing") }
+        try SelfTests.check(compactFrame.width >= 40 && compactFrame.width <= 64,"collapsed sidebar retains generous icon-only hit areas")
+        try SelfTests.check(attribute(compactItem,"accessibilityLabel") as? String == "联系人","icon-only navigation retains an accessible name")
+        if let toggle=find(window,"sidebar.toggle"), let toggleFrame=(attribute(toggle,"accessibilityFrame") as? NSValue)?.rectValue,
+           let close=window.standardWindowButton(.closeButton) {
+            let closeFrame=window.convertToScreen(close.convert(close.bounds,to:nil))
+            try SelfTests.check(!toggleFrame.intersects(closeFrame),"sidebar toggle leaves the native window controls unobstructed")
+        }
+        try await click(window,id:"sidebar.设置")
+        try SelfTests.check(find(window,"account.logout.settings") != nil,"collapsed navigation still opens the settings page")
+        try await click(window,id:"account.settings")
+        try SelfTests.check(model.saved.selected == selectionBeforeFold,"collapsing and account navigation preserve recipients")
+        model.busy=true
+        try await click(window,id:"sidebar.toggle")
+        guard let expandedItem=find(window,"sidebar.联系人"), let expandedFrame=(attribute(expandedItem,"accessibilityFrame") as? NSValue)?.rectValue else { throw PrototypeError.message("Expanded navigation missing") }
+        try SelfTests.check(expandedFrame.width > 140 && model.busy,"sidebar can expand during an ongoing task")
+        model.busy=false
+        try SelfTests.check((UserDefaults.standard.object(forKey:"Sparky.sidebarCollapsed") as? Bool) == preferenceBefore,"offline UI tests do not alter the user's sidebar preference")
         // The right edge is deliberately outside the icon and text, inside the
         // same rounded row background users see as the selection highlight.
         for name in ["联系人","发送记录","设置","发送计划"] {
@@ -75,6 +109,7 @@ enum WindowTests {
         try SelfTests.check(find(window,"task.activity") != nil && find(window,"task.stop") == nil,"contact loading never presents a send cancellation action")
         model.busy=false; model.engine.busy=false
         try await pause()
+        try await click(window,id:"sidebar.toggle")
         window.makeKeyAndOrderFront(nil); NSApp.activate(ignoringOtherApps:true)
         window.makeFirstResponder(nil); try await pause(); NSApp.mainMenu?.update()
         let event=NSEvent.keyEvent(with:.keyDown,location:.zero,modifierFlags:[.command],timestamp:ProcessInfo.processInfo.systemUptime,windowNumber:window.windowNumber,context:nil,characters:"w",charactersIgnoringModifiers:"w",isARepeat:false,keyCode:13)!
@@ -85,6 +120,7 @@ enum WindowTests {
         try SelfTests.check(model.saved.plan.enabled && delegate.status != nil && model.engine.webView == nil,"closing leaves the plan and menu bar app intact without starting WebKit")
         delegate.show(); try await pause()
         try SelfTests.check(window.isVisible && NSApp.activationPolicy() == .regular,"menu-bar reopen restores Dock presence")
+        try SelfTests.check(find(window,"sidebar.toggle").flatMap { attribute($0,"accessibilityValue") as? String } == "已折叠","reopening the main window retains the collapsed sidebar")
         window.miniaturize(nil); try await pause()
         try SelfTests.check(NSApp.activationPolicy() == .regular,"minimizing keeps Dock presence")
         _ = delegate.applicationShouldHandleReopen(NSApp,hasVisibleWindows:false)
