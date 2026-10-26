@@ -18,7 +18,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             if preview || windowTest { model.seedPreview() }
             window = NSWindow(contentRect:NSRect(x:0,y:0,width:1030,height:800),styleMask:[.titled,.closable,.miniaturizable,.resizable,.fullSizeContentView],backing:.buffered,defer:false)
             window.title = "Sparky"; window.titleVisibility = .hidden; window.toolbar = NSToolbar(identifier:"SparkToolbar"); window.toolbarStyle = .unified; window.isReleasedWhenClosed = false; window.delegate = self
-            window.contentView = NSHostingView(rootView:SparkyView(model:model)); window.minSize = NSSize(width:900,height:690); window.center()
+            let viewModel = model!
+            let hostingView = NSHostingView(rootView: GeometryReader { geometry in
+                SparkyView(model:viewModel).frame(width:geometry.size.width,height:geometry.size.height)
+            })
+            hostingView.sizingOptions = []
+            window.contentView = hostingView; window.minSize = NSSize(width:900,height:690); window.center()
             status = NSStatusBar.system.statusItem(withLength:NSStatusItem.squareLength)
             status.button?.image = NSImage(systemSymbolName:"flame",accessibilityDescription:"Sparky")
             configureMainMenu()
@@ -32,7 +37,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 return
             }
             if preview {
-                window.appearance = NSAppearance(named:.aqua)
+                window.appearance = NSAppearance(named: CommandLine.arguments.contains("--ui-dark") ? .darkAqua : .aqua)
+                if CommandLine.arguments.contains("--ui-compact") { window.setContentSize(NSSize(width:900,height:690)) }
+                if CommandLine.arguments.contains("--ui-empty") { try? model.commit { $0.account=nil; $0.contacts=[]; $0.selected=[]; $0.history=[]; $0.plan.enabled=false } }
+                if CommandLine.arguments.contains("--ui-stress") {
+                    try? model.commit { state in
+                        state.account?.nickname = String(repeating: "很长的昵称", count: 12)
+                        state.contacts.append(Contact(id:"long-name",title:String(repeating:"这是一个很长的群聊名称",count:12),group:true))
+                    }
+                }
+                if CommandLine.arguments.contains("--ui-loading") { model.busy=true; model.engine.busy=true; model.activity="正在读取联系人…" }
                 DispatchQueue.main.asyncAfter(deadline:.now()+2) { [self] in
                     window.makeFirstResponder(nil)
                     let view = window.contentView!; view.layoutSubtreeIfNeeded()

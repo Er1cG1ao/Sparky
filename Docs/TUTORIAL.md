@@ -14,7 +14,7 @@ The list contains existing conversations, including groups. Folded or stranger l
 
 ## Choose conversations and switch accounts
 
-Under Contacts (`联系人`), search for a person or group and toggle the conversations you want. **Select search results** (`全选搜索结果`) and **Deselect** (`取消选择`) apply to the currently filtered list.
+Under Contacts (`联系人`), search for a person or group and toggle the conversations you want. **Select current list** (`全选当前列表`) and **Deselect** (`取消选择`) apply to the currently filtered list. Click anywhere on a contact row to toggle it, or switch between All (`全部`) and Selected (`已选`) above the list.
 
 Selections are saved under the stable Douyin account UID and conversation IDs. Signing out or restarting does not erase these preferences. After signing back in, Sparky restores selected conversations that appear in the refreshed list. Remembered conversations absent from one scan stay remembered and can be restored by a later scan. Explicit selection changes update those preferences.
 
@@ -39,6 +39,8 @@ Sparky uses one WebKit page and sends sequentially. It checks the selected accou
 
 ## Understand delivery results
 
+Records are grouped by date. Expand a row to see its evidence and, when available, the message ID.
+
 | Result | Meaning |
 | --- | --- |
 | Server confirmed (`服务器确认`) | A send request started after the click received a successful server response. This does not establish delivery, reading or a streak update. |
@@ -50,6 +52,8 @@ Sparky uses one WebKit page and sends sequentially. It checks the selected accou
 Receipts are associated using request timing in the current page; they are not an end-to-end delivery guarantee. Check page-only or uncertain results on your phone before deciding whether to resend manually. Interrupted sends are recorded rather than automatically replayed.
 
 ## Windows and startup
+
+Settings are grouped into Account (`抖音账号`), General (`通用`) and Diagnostics (`诊断`); expand Run log (`运行日志`) to inspect or copy diagnostic logs.
 
 The main window shows a Dock icon and supports ⌘Tab. Close it with the red close button or ⌘W to hide the Dock icon and keep the app in the menu bar. Open it again from the menu bar. Minimizing keeps the Dock icon.
 

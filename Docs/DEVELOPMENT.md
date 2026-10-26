@@ -41,7 +41,7 @@ Native window interaction tests:
 /tmp/sparky-build/Sparky.app/Contents/MacOS/Sparky --window-self-test
 ```
 
-These use demo data to verify ⌘W, Dock/menu bar mode changes and full-row sidebar hit areas. For a UI smoke check, use `--ui-smoke`; add `--ui-settings`, `--ui-contacts` or `--ui-history` to select a page.
+These use demo data to verify ⌘W, Dock/menu bar mode changes and full-row sidebar/contact hit areas, selection persistence, search/filtering, review cancellation and compact empty-list layout. For a UI smoke check, use `--ui-smoke`; add `--ui-settings`, `--ui-contacts` or `--ui-history` to select a page. Add `--ui-dark`, `--ui-compact`, `--ui-empty`, `--ui-stress` or `--ui-loading` for appearance and layout checks. These modes use synthetic data only.
 
 ## Source layout
 
@@ -49,6 +49,7 @@ These use demo data to verify ⌘W, Dock/menu bar mode changes and full-row side
 | --- | --- |
 | `Sources/main.swift` | App lifecycle, native windows, menus and Dock policy. |
 | `Sources/Views.swift` | SwiftUI pages and send review. |
+| `Sources/Design.swift` | Semantic surfaces, section layout, shared icon and row feedback. |
 | `Sources/Model.swift` | Persistent settings, account preferences, plans and delivery records. |
 | `Sources/Engine.swift` | On-demand WebKit, login, contact scanning and send verification. |
 | `Sources/Avatars.swift` | Restricted avatar loading and thumbnail caching. |
@@ -61,6 +62,8 @@ These use demo data to verify ⌘W, Dock/menu bar mode changes and full-row side
 Keep the application identifier and legacy `Spark` support directory stable to preserve existing login and settings. Never commit `state.json`, login data, private logs or chat screenshots.
 
 ## Documentation
+
+Native design decisions and the external skill references are recorded in [Design](DESIGN.md).
 
 `README.md` and `README.zh-CN.md` provide parallel English and Simplified Chinese introductions. Detailed user behavior belongs in the matching `Docs/TUTORIAL*.md` files. Update both languages when changing a feature description, and keep relative links and the shared icon path valid.
 

@@ -105,6 +105,7 @@ final class LocalStore {
 final class SparkyModel: ObservableObject {
     @Published private(set) var saved: SavedState
     @Published var busy = false
+    @Published private(set) var sending = false
     @Published var engineActive = false
     @Published var progress = 0
     @Published var total = 0
@@ -362,11 +363,11 @@ final class SparkyModel: ObservableObject {
             // never replay a partially executed scheduled batch.
             try commit { $0.plan.lastScheduledDay = DailyPlan.day(start); $0.history.append(contentsOf: records) }
         } catch { notice = "无法保存任务记录，未启动发送：\(error.localizedDescription)"; return }
-        busy = true; engine.busy = true; cancelRequested = false; progress = 0; total = targets.count
+        busy = true; sending = true; engine.busy = true; cancelRequested = false; progress = 0; total = targets.count
         activity = "正在连接抖音…"; changed?()
         var fatal: String?
         defer {
-            engine.busy = false; engine.stop(); engineActive = false; busy = false
+            engine.busy = false; engine.stop(); engineActive = false; busy = false; sending = false
             let run = saved.history.filter { $0.runID == runID }
             let confirmed = run.filter { $0.state == .confirmed }.count
             let page = run.filter { $0.state == .pageOnly }.count

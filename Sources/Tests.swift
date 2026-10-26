@@ -84,7 +84,12 @@ enum SelfTests {
         let loaded=try model.store.load()
         try check(loaded.selected.count==2 && loaded.message==text,"multi-selection and message survive store roundtrip")
         let batchStart=ContinuousClock.now
+        let previousChanged=model.changed
+        var observedSending=false
+        model.changed = { previousChanged?(); if model.sending && model.busy { observedSending=true } }
         await model.runBatch(scheduled:false)
+        model.changed=previousChanged
+        try check(observedSending && !model.sending,"send-specific UI state is active only during a batch")
         print("BENCHMARK: two offline contacts = \(batchStart.duration(to:.now)); excludes real network delays")
         let afterBatch=model.saved.history.count
         await model.runBatch(scheduled:true)
