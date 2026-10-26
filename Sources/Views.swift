@@ -352,7 +352,7 @@ struct SparkyView: View {
             }
             HStack(spacing: 10) {
                 SparkyMark(size: 34)
-                VStack(alignment: .leading, spacing: 3) { Text("Sparky 0.3.4").font(.caption.weight(.medium)); Text("设置与记录保存在本机").font(.caption).foregroundStyle(.secondary) }
+                VStack(alignment: .leading, spacing: 3) { Text("Sparky 1.0.0").font(.caption.weight(.medium)); Text("设置与记录保存在本机").font(.caption).foregroundStyle(.secondary) }
                 Spacer()
             }.padding(.horizontal, 4)
         }

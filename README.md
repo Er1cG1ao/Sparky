@@ -27,7 +27,7 @@ Built with Swift, SwiftUI and AppKit. No bundled Chromium, Python runtime or sep
 
 Requires **Apple Silicon (M-series), macOS 14 or later**. Intel installers are not currently provided.
 
-1. Download the DMG from **Assets** on the [Releases page](https://github.com/Er1cG1ao/Sparky/releases), including releases marked **Pre-release**.
+1. Download the DMG from **Assets** in the [latest stable release](https://github.com/Er1cG1ao/Sparky/releases/latest). See [Releases](https://github.com/Er1cG1ao/Sparky/releases) for previous versions.
 2. Quit any older Spark / Sparky instance, open the DMG, and drag `Sparky.app` into **Applications**.
 3. In Settings (`设置`), open the login window and sign in to Douyin. The window hides automatically while contacts are read.
 4. Select conversations under Contacts (`联系人`), then set your message and time under Send Plan (`发送计划`).

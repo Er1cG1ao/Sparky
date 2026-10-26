@@ -27,7 +27,7 @@
 
 要求 **Apple Silicon（M 系列）Mac，macOS 14 或更高版本**。暂不提供 Intel 安装包。
 
-1. 在[版本页面](https://github.com/Er1cG1ao/Sparky/releases)的 **Assets** 中下载 DMG，测试版会标记为 **Pre-release**。
+1. 在[最新正式版](https://github.com/Er1cG1ao/Sparky/releases/latest)的 **Assets** 中下载 DMG；历史版本见[版本页面](https://github.com/Er1cG1ao/Sparky/releases)。
 2. 完全退出旧 Spark / Sparky，打开镜像，把 `Sparky.app` 拖入 **Applications（应用程序）**。
 3. 在“设置”打开登录窗口并登录抖音；成功后窗口自动收起，开始读取联系人。
 4. 在“联系人”勾选会话，在“发送计划”设置消息和每日时间。
