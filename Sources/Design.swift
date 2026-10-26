@@ -118,3 +118,13 @@ struct SidebarBackdrop: NSViewRepresentable {
     }
     func updateNSView(_ view: NSVisualEffectView, context: Context) { }
 }
+
+// An opaque boundary keeps the wallpaper from showing through the column seam.
+struct SidebarSeparator: View {
+    @Environment(\.colorScheme) private var scheme
+    @Environment(\.colorSchemeContrast) private var contrast
+    var body: some View {
+        let gray: Double = scheme == .dark ? (contrast == .increased ? 0.48 : 0.26) : (contrast == .increased ? 0.60 : 0.84)
+        Color(white: gray).frame(width: 1).accessibilityHidden(true)
+    }
+}

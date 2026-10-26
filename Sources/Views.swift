@@ -17,8 +17,6 @@ private enum Page: String, CaseIterable, Identifiable {
 struct SparkyView: View {
     @ObservedObject var model: SparkyModel
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @ViewState private var sidebarCollapsed = false
     @ViewState private var page: Page? = .plan
     @ViewState private var search = ""
     @ViewState private var selectedOnly = false
@@ -27,9 +25,6 @@ struct SparkyView: View {
     @ViewState private var loggingOut = false
     init(model: SparkyModel) {
         self.model = model
-        self._sidebarCollapsed = ViewState(initialValue: model.testing
-            ? CommandLine.arguments.contains("--ui-collapsed")
-            : UserDefaults.standard.bool(forKey: "Sparky.sidebarCollapsed"))
         let initial: Page = CommandLine.arguments.contains("--ui-contacts") ? .contacts : CommandLine.arguments.contains("--ui-history") ? .history : CommandLine.arguments.contains("--ui-settings") ? .settings : .plan
         self._page = ViewState(initialValue: initial)
     }
@@ -40,8 +35,8 @@ struct SparkyView: View {
     }
     var body: some View {
         HStack(spacing: 0) {
-            sidebar.frame(width: sidebarCollapsed ? 80 : 225).clipped()
-            Divider()
+            sidebar.frame(width: 225).clipped()
+            SidebarSeparator()
             VStack(spacing: 0) {
                 pageHeader
                 if model.busy { taskStatus }
@@ -74,39 +69,22 @@ struct SparkyView: View {
             Text(loggingOut ? "将暂停定时计划并清空当前联系人，保留各账号的好友选择、消息模板与发送记录。仅退出本应用，不影响手机或 Safari。" : "这不会重置今天的定时任务，也不会重新发送。")
         }
     }
-    private func toggleSidebar() {
-        let keyboard = NSApp.currentEvent?.type == .keyDown || NSApp.currentEvent?.type == .keyUp
-        if reduceMotion || keyboard { sidebarCollapsed.toggle() }
-        else { withAnimation(.easeInOut(duration: 0.18)) { sidebarCollapsed.toggle() } }
-        if !model.testing { UserDefaults.standard.set(sidebarCollapsed, forKey: "Sparky.sidebarCollapsed") }
-    }
     private var sidebar: some View {
-        VStack(alignment: .leading, spacing: 20) {
+        VStack(alignment: .leading, spacing: 22) {
             HStack(spacing: 8) {
-                if !sidebarCollapsed {
-                    SparkyMark(size: 32)
-                    Text("Sparky").font(.title3.weight(.semibold)).lineLimit(1)
-                    Spacer(minLength: 0)
-                }
-                Button { toggleSidebar() } label: {
-                    Image(systemName: "sidebar.left").font(.system(size: 16)).frame(width: 28, height: 32)
-                }.buttonStyle(SparkyRowStyle()).foregroundStyle(.secondary)
-                    .help(sidebarCollapsed ? "展开侧栏" : "收起侧栏")
-                    .accessibilityLabel(sidebarCollapsed ? "展开侧栏" : "收起侧栏")
-                    .accessibilityValue(sidebarCollapsed ? "已折叠" : "已展开")
-                    .accessibilityIdentifier("sidebar.toggle")
-                    .keyboardShortcut("s", modifiers: [.command, .control])
-            }.frame(maxWidth: .infinity).frame(height: 40).padding(.horizontal, 12).padding(.top, 42)
+                SparkyMark(size: 32)
+                Text("Sparky").font(.title3.weight(.semibold)).lineLimit(1)
+                Spacer(minLength: 0)
+            }.frame(maxWidth: .infinity).frame(height: 40).padding(.horizontal, 12).padding(.top, 54)
+                .accessibilityElement(children: .combine).accessibilityIdentifier("sidebar.brand")
             VStack(spacing: 4) {
                 ForEach(Page.allCases) { item in
                     Button { page = item } label: {
                         HStack(spacing: 10) {
                             Image(systemName: item.icon).font(.system(size: 15)).frame(width: 20)
                                 .foregroundStyle(page == item ? Color.orange : Color.secondary)
-                            if !sidebarCollapsed {
-                                Text(item.rawValue).fontWeight(page == item ? .medium : .regular).lineLimit(1)
-                                Spacer(minLength: 0)
-                            }
+                            Text(item.rawValue).fontWeight(page == item ? .medium : .regular).lineLimit(1)
+                            Spacer(minLength: 0)
                         }.frame(maxWidth: .infinity, minHeight: 20).padding(.horizontal, 12).padding(.vertical, 9)
                     }.buttonStyle(SparkyRowStyle(selected: page == item))
                         .help(item.rawValue).accessibilityLabel(item.rawValue).accessibilityIdentifier("sidebar.\(item.rawValue)")
@@ -114,35 +92,9 @@ struct SparkyView: View {
                 }
             }.padding(.horizontal, 10)
             Spacer(minLength: 0)
-            if sidebarCollapsed { compactAccountFooter }
-            else { accountFooter }
+            accountFooter
         }.frame(maxHeight: .infinity)
         .background { if reduceTransparency { Color(nsColor: .windowBackgroundColor) } else { SidebarBackdrop() } }
-    }
-    private var compactAccountFooter: some View {
-        VStack(spacing: 10) {
-            Button {
-                if model.saved.account == nil && model.saved.logoutPending != true { model.connect() }
-                else { page = .settings }
-            } label: {
-                Image(systemName: "person.crop.circle").font(.system(size: 23)).frame(width: 40, height: 36)
-                    .overlay(alignment: .bottomTrailing) {
-                        Circle().fill(model.busy ? Color.orange : model.saved.account == nil ? Color.secondary : .green).frame(width: 6, height: 6).padding(4)
-                    }
-            }.buttonStyle(SparkyRowStyle()).foregroundStyle(.secondary)
-                .disabled(model.saved.account == nil && model.busy)
-                .help(model.saved.account?.nickname ?? "登录抖音")
-                .accessibilityLabel(model.saved.account == nil ? "登录抖音" : "账号设置")
-                .accessibilityIdentifier(model.saved.account == nil ? "account.login" : "account.settings")
-            if model.loginInProgress {
-                Button { model.cancelLogin() } label: { Image(systemName: "xmark.circle").frame(width: 40, height: 30) }
-                    .buttonStyle(SparkyRowStyle()).help("取消登录").accessibilityLabel("取消登录")
-            } else if model.saved.account != nil || model.saved.logoutPending == true {
-                Button { loggingOut = true } label: { Image(systemName: "rectangle.portrait.and.arrow.right").frame(width: 40, height: 30) }
-                    .buttonStyle(SparkyRowStyle()).foregroundStyle(.secondary).disabled(model.busy)
-                    .help("退出登录").accessibilityLabel("退出登录").accessibilityIdentifier("account.logout.sidebar")
-            }
-        }.frame(maxWidth: .infinity).padding(.vertical, 14)
     }
     private var accountFooter: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -400,7 +352,7 @@ struct SparkyView: View {
             }
             HStack(spacing: 10) {
                 SparkyMark(size: 34)
-                VStack(alignment: .leading, spacing: 3) { Text("Sparky 0.3.3").font(.caption.weight(.medium)); Text("设置与记录保存在本机").font(.caption).foregroundStyle(.secondary) }
+                VStack(alignment: .leading, spacing: 3) { Text("Sparky 0.3.4").font(.caption.weight(.medium)); Text("设置与记录保存在本机").font(.caption).foregroundStyle(.secondary) }
                 Spacer()
             }.padding(.horizontal, 4)
         }

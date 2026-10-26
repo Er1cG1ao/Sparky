@@ -55,7 +55,7 @@ Receipts are associated using request timing in the current page; they are not a
 
 Settings are grouped into Account (`抖音账号`), General (`通用`) and Diagnostics (`诊断`); expand Run log (`运行日志`) to inspect or copy diagnostic logs.
 
-The window uses two full-height columns without a separate toolbar band. Use the sidebar button beside the app name to collapse it into an icon rail; click it again to restore labels. Hover an icon to see its name. Account and sign-out actions remain available at the bottom, and the app remembers the sidebar preference across launches. The sidebar uses a translucent window backdrop, with a solid fallback when macOS requests reduced transparency.
+The window uses two full-height columns without a separate toolbar band. The sidebar always shows icons and labels, with account and sign-out actions at the bottom. A subtle opaque gray line separates it from the main view. The sidebar uses a translucent window backdrop, with a solid fallback when macOS requests reduced transparency.
 
 The native window buttons are inset from the rounded corner. The green button stretches the window to the usable screen height without changing its width; press it again to restore the previous height and position. It stays on the desktop and does not enter fullscreen. The sidebar uses the standard system sidebar material at normal effect opacity, following window activation. Its minimum content size is 940 × 760 points, so the message, time, recipients and send button remain accessible; long lists still scroll.
 
@@ -71,7 +71,7 @@ Settings, account selections and up to **2,000 send metadata records** are store
 ~/Library/Application Support/Spark/state.json
 ```
 
-The legacy directory and application identifier are retained for upgrade compatibility. The settings include the message template; individual history entries do not store an additional copy of the message body. The state file is writable and readable only by the current user. The sidebar collapse preference is stored separately in macOS UserDefaults. Login data is managed by WebKit; Sparky does not export login cookies or send data to a separate upload server.
+The legacy directory and application identifier are retained for upgrade compatibility. The settings include the message template; individual history entries do not store an additional copy of the message body. The state file is writable and readable only by the current user. Login data is managed by WebKit; Sparky does not export login cookies or send data to a separate upload server.
 
 Avatars download from supported Douyin/ByteDance HTTPS CDNs without login cookies, with restricted redirects. Only thumbnails are cached in:
 
