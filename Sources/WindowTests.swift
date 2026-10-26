@@ -28,12 +28,65 @@ enum WindowTests {
         }
         try await pause()
     }
+    static func clickNative(_ window:NSWindow, button:NSButton) async throws {
+        let point=button.convert(NSPoint(x:button.bounds.midX,y:button.bounds.midY),to:nil)
+        guard let root=window.contentView?.superview,
+              root.hitTest(root.convert(point,from:nil)) === button else {
+            throw PrototypeError.message("Native window button is outside its hit region")
+        }
+        // Native titlebar widgets have a separate AppKit tracking loop. Verify
+        // their real hit target, then exercise the corresponding window action.
+        if button === window.standardWindowButton(.miniaturizeButton) { window.miniaturize(nil) }
+        else if button === window.standardWindowButton(.closeButton) { window.performClose(nil) }
+        try await pause()
+    }
+    static func checkWindowControls(_ window:NSWindow) throws {
+        for type in [NSWindow.ButtonType.closeButton,.miniaturizeButton] {
+            guard let button=window.standardWindowButton(type) else { throw PrototypeError.message("Native window button missing") }
+            let frame=window.convertToScreen(button.convert(button.bounds,to:nil))
+            try SelfTests.check(abs(frame.minX-window.frame.minX-(type == .closeButton ? 18 : 38)) < 1 && abs(window.frame.maxY-frame.maxY-18) < 1,"native \(type == .closeButton ? "close" : "minimize") button keeps an 18-point corner inset")
+        }
+    }
     static func run(_ delegate:AppDelegate) async throws {
-        DispatchQueue.main.asyncAfter(deadline:.now()+45) { fputs("FAIL: native window test timeout\n",stderr); exit(1) }
+        DispatchQueue.main.asyncAfter(deadline:.now()+55) { fputs("FAIL: native window test timeout\n",stderr); exit(1) }
         try await pause()
         let window=delegate.window!, model=delegate.model!
+        let probe=NSWindow(contentRect:NSRect(x:100,y:100,width:300,height:240),styleMask:[.titled,.miniaturizable],backing:.buffered,defer:false)
+        probe.isReleasedWhenClosed=false; probe.makeKeyAndOrderFront(nil)
+        try await pause(); probe.miniaturize(nil)
+        try await Task.sleep(for:.seconds(1))
+        let minimizationAvailable=probe.isMiniaturized
+        probe.close(); delegate.show(); try await pause()
         try SelfTests.check(window.isVisible && NSApp.activationPolicy() == .regular,"visible main window uses regular Dock application policy")
         try SelfTests.check(find(window,"account.logout.sidebar") != nil,"sidebar exposes logout beside the account name")
+        try checkWindowControls(window)
+        try SelfTests.check(window.standardWindowButton(.zoomButton)?.isHidden == true && window.standardWindowButton(.zoomButton)?.isEnabled == false,"green zoom control is hidden and disabled")
+        try SelfTests.check(window.collectionBehavior.contains(.fullScreenNone) && window.collectionBehavior.contains(.fullScreenDisallowsTiling),"main window opts out of fullscreen and split-screen tiling")
+        let originalFrame=window.frame
+        window.toggleFullScreen(nil); window.performZoom(nil); window.zoom(nil)
+        try await pause()
+        try SelfTests.check(!window.styleMask.contains(.fullScreen) && window.frame == originalFrame,"fullscreen and zoom actions cannot enlarge the main window")
+        window.setContentSize(NSSize(width:300,height:200))
+        try await pause()
+        try SelfTests.check(window.contentView!.bounds.width >= 940 && window.contentView!.bounds.height >= 760,"undersized content requests are clamped to the readable minimum")
+        window.setFrame(NSRect(x:originalFrame.minX,y:originalFrame.maxY-240,width:320,height:240),display:true)
+        try SelfTests.check(window.frame.width >= window.minSize.width && window.frame.height >= window.minSize.height,"frame resizing cannot bypass the minimum")
+        window.setFrame(NSRect(x:originalFrame.minX,y:originalFrame.maxY-240,width:320,height:240),display:true,animate:false)
+        let liveSize=delegate.windowWillResize(window,to:NSSize(width:320,height:240))
+        try SelfTests.check(window.frame.width >= window.minSize.width && liveSize.width >= window.minSize.width && liveSize.height >= window.minSize.height,"animated and live resize paths enforce the same minimum")
+        try await pause()
+        try checkWindowControls(window)
+        for id in ["plan.message","plan.time","plan.recipients","plan.run"] {
+            guard let element=find(window,id), let frame=(attribute(element,"accessibilityFrame") as? NSValue)?.rectValue else { throw PrototypeError.message("Missing plan control: \(id)") }
+            try SelfTests.check(frame.minX >= window.frame.minX && frame.maxX <= window.frame.maxX && frame.minY >= window.frame.minY && frame.maxY <= window.frame.maxY,"minimum window keeps \(id) in view")
+        }
+        if let recipient=find(window,"plan.recipients"), let run=find(window,"plan.run"),
+           let r=(attribute(recipient,"accessibilityFrame") as? NSValue)?.rectValue,
+           let b=(attribute(run,"accessibilityFrame") as? NSValue)?.rectValue {
+            try SelfTests.check(r.minY > b.maxY,"recipient selection remains above the fixed send footer at minimum size")
+        }
+        window.setFrame(originalFrame,display:true)
+        try await pause()
         try SelfTests.check(window.toolbar == nil && window.titlebarAppearsTransparent && !window.isOpaque,"window uses a transparent title bar without an empty toolbar band")
         if let backdrop=sidebarBackdrop(window.contentView!) {
             try SelfTests.check(backdrop.blendingMode == .behindWindow && backdrop.material == .sidebar && backdrop.alphaValue < 1,"sidebar uses a more transparent window backdrop without fading its controls")
@@ -121,7 +174,15 @@ enum WindowTests {
         delegate.show(); try await pause()
         try SelfTests.check(window.isVisible && NSApp.activationPolicy() == .regular,"menu-bar reopen restores Dock presence")
         try SelfTests.check(find(window,"sidebar.toggle").flatMap { attribute($0,"accessibilityValue") as? String } == "已折叠","reopening the main window retains the collapsed sidebar")
-        window.miniaturize(nil); try await pause()
+        guard let minimize=window.standardWindowButton(.miniaturizeButton) else { throw PrototypeError.message("Minimize button missing") }
+        try await clickNative(window,button:minimize)
+        try await Task.sleep(for:.seconds(1))
+        if minimizationAvailable {
+            try SelfTests.check(window.isMiniaturized,"inset minimize hit target and native action remain available")
+        } else {
+            print("SKIP: minimization acknowledgement unavailable in this session; an unmodified NSWindow also cannot minimize")
+            try SelfTests.check(window.styleMask.contains(.miniaturizable) && minimize.isEnabled,"native minimize control and style remain enabled")
+        }
         try SelfTests.check(NSApp.activationPolicy() == .regular,"minimizing keeps Dock presence")
         _ = delegate.applicationShouldHandleReopen(NSApp,hasVisibleWindows:false)
         try await pause()
@@ -134,7 +195,9 @@ enum WindowTests {
             guard let element=find(window,id), let frame=(attribute(element,"accessibilityFrame") as? NSValue)?.rectValue else { throw PrototypeError.message("Missing empty-list control: \(id)") }
             try SelfTests.check(frame.minY >= window.frame.minY && frame.maxY <= window.frame.maxY,"empty-list control \(id) remains inside a compact window")
         }
-        window.performClose(nil); try await pause()
+        try checkWindowControls(window)
+        guard let close=window.standardWindowButton(.closeButton) else { throw PrototypeError.message("Close button missing") }
+        try await clickNative(window,button:close)
         try SelfTests.check(NSApp.activationPolicy() == .accessory,"red close button returns to menu-bar mode")
         try? FileManager.default.removeItem(at:model.store.directory)
     }

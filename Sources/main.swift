@@ -16,14 +16,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             model = SparkyModel(store:LocalStore(directory:directory),engine:engine,testing:test || preview || windowTest)
             if test { Task { do { if CommandLine.arguments.contains("--logout-only") { try await LogoutTests.run() } else if CommandLine.arguments.contains("--scan-only") { try await ContactScanTests.run() } else if CommandLine.arguments.contains("--login-only") { try await LoginTests.run() } else { try await SelfTests.run(model) }; print("PASS: all Sparky offline tests"); fflush(stdout); exit(0) } catch { fputs("FAIL: \(error)\n",stderr); exit(1) } }; return }
             if preview || windowTest { model.seedPreview() }
-            window = NSWindow(contentRect:NSRect(x:0,y:0,width:1030,height:800),styleMask:[.titled,.closable,.miniaturizable,.resizable,.fullSizeContentView],backing:.buffered,defer:false)
+            window = SparkyMainWindow(contentRect:NSRect(x:0,y:0,width:1030,height:800),styleMask:[.titled,.closable,.miniaturizable,.resizable,.fullSizeContentView],backing:.buffered,defer:false)
             window.title = "Sparky"; window.titleVisibility = .hidden; window.toolbar = nil; window.titlebarAppearsTransparent = true; window.titlebarSeparatorStyle = .none; window.isOpaque = false; window.backgroundColor = .clear; window.isReleasedWhenClosed = false; window.delegate = self
+            (window as? SparkyMainWindow)?.configureWindowRules()
             let viewModel = model!
             let hostingView = NSHostingView(rootView: GeometryReader { geometry in
                 SparkyView(model:viewModel).frame(width:geometry.size.width,height:geometry.size.height)
             }.ignoresSafeArea(.container, edges: .top))
             hostingView.sizingOptions = []
-            window.contentView = hostingView; window.minSize = NSSize(width:900,height:690); window.center()
+            window.contentView = hostingView
+            (window as? SparkyMainWindow)?.installWindowControls()
+            window.center()
             status = NSStatusBar.system.statusItem(withLength:NSStatusItem.squareLength)
             status.button?.image = NSImage(systemSymbolName:"flame",accessibilityDescription:"Sparky")
             configureMainMenu()
@@ -38,7 +41,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             }
             if preview {
                 window.appearance = NSAppearance(named: CommandLine.arguments.contains("--ui-dark") ? .darkAqua : .aqua)
-                if CommandLine.arguments.contains("--ui-compact") { window.setContentSize(NSSize(width:900,height:690)) }
+                if CommandLine.arguments.contains("--ui-compact") { window.setContentSize(SparkyMainWindow.minimumContentSize) }
                 if CommandLine.arguments.contains("--ui-empty") { try? model.commit { $0.account=nil; $0.contacts=[]; $0.selected=[]; $0.history=[]; $0.plan.enabled=false } }
                 if CommandLine.arguments.contains("--ui-stress") {
                     try? model.commit { state in
@@ -49,7 +52,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 if CommandLine.arguments.contains("--ui-loading") { model.busy=true; model.engine.busy=true; model.activity="正在读取联系人…" }
                 DispatchQueue.main.asyncAfter(deadline:.now()+2) { [self] in
                     window.makeFirstResponder(nil)
-                    let view = window.contentView!; view.layoutSubtreeIfNeeded()
+                    let view = window.contentView!.superview ?? window.contentView!; view.layoutSubtreeIfNeeded()
                     if let bitmap = view.bitmapImageRepForCachingDisplay(in:view.bounds) { view.cacheDisplay(in:view.bounds,to:bitmap); try? bitmap.representation(using:.png,properties:[:])?.write(to:URL(fileURLWithPath:"/tmp/spark-native-ui.png")) }
                     print("UI smoke complete"); fflush(stdout); exit(0)
                 }
@@ -89,7 +92,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         editItem.submenu = editMenu; menu.addItem(editItem)
         let windowItem = NSMenuItem(); let windowMenu = NSMenu(title:"窗口")
         windowMenu.addItem(NSMenuItem(title:"最小化",action:#selector(NSWindow.performMiniaturize(_:)),keyEquivalent:"m"))
-        windowMenu.addItem(NSMenuItem(title:"缩放",action:#selector(NSWindow.performZoom(_:)),keyEquivalent:""))
         windowItem.submenu = windowMenu; menu.addItem(windowItem)
         NSApp.mainMenu = menu; NSApp.windowsMenu = windowMenu
     }
@@ -99,6 +101,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps:true)
     }
+    func windowDidResize(_ notification:Notification) {
+        (notification.object as? SparkyMainWindow)?.positionWindowControls()
+    }
+    func windowDidUpdate(_ notification:Notification) {
+        (notification.object as? SparkyMainWindow)?.positionWindowControls()
+    }
+    func windowWillResize(_ sender:NSWindow,to frameSize:NSSize) -> NSSize {
+        (sender as? SparkyMainWindow)?.constrainedFrameSize(frameSize) ?? frameSize
+    }
+    func windowShouldZoom(_ window:NSWindow,toFrame newFrame:NSRect) -> Bool { false }
     func windowWillClose(_ notification:Notification) {
         guard let closing = notification.object as? NSWindow, closing === window else { return }
         NSApp.setActivationPolicy(.accessory)

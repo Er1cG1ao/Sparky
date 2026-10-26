@@ -41,13 +41,16 @@ Native window interaction tests:
 /tmp/sparky-build/Sparky.app/Contents/MacOS/Sparky --window-self-test
 ```
 
-These use demo data to verify ⌘W, Dock/menu bar mode changes and full-row sidebar/contact hit areas, selection persistence, search/filtering, review cancellation and compact empty-list layout, sidebar collapse/navigation, and the transparent title bar/backdrop. For a UI smoke check, use `--ui-smoke`; add `--ui-settings`, `--ui-contacts` or `--ui-history` to select a page. Add `--ui-dark`, `--ui-compact`, `--ui-collapsed`, `--ui-empty`, `--ui-stress` or `--ui-loading` for appearance and layout checks. These modes use synthetic data only.
+These use demo data to verify minimum-size enforcement through content/frame/live resize paths, visible controls at the minimum, inset native button hit targets, fullscreen/zoom exclusion, and ⌘W, Dock/menu bar mode changes and full-row sidebar/contact hit areas, selection persistence, search/filtering, review cancellation and compact empty-list layout, sidebar collapse/navigation, and the transparent title bar/backdrop. For a UI smoke check, use `--ui-smoke`; add `--ui-settings`, `--ui-contacts` or `--ui-history` to select a page. Add `--ui-dark`, `--ui-compact`, `--ui-collapsed`, `--ui-empty`, `--ui-stress` or `--ui-loading` for appearance and layout checks. These modes use synthetic data only.
+
+The suite compares minimization against an unmodified `NSWindow`. If the session cannot minimize that control window, the acknowledgement check is reported as skipped; native style and hit-target checks still run. Use a normal desktop session to verify Dock minimization.
 
 ## Source layout
 
 | Path | Responsibility |
 | --- | --- |
 | `Sources/main.swift` | App lifecycle, native windows, menus and Dock policy. |
+| `Sources/MainWindow.swift` | Native control placement, minimum size enforcement and fullscreen/zoom exclusion. |
 | `Sources/Views.swift` | SwiftUI pages and send review. |
 | `Sources/Design.swift` | Semantic surfaces, section layout, shared icon and row feedback. |
 | `Sources/Model.swift` | Persistent settings, account preferences, plans and delivery records. |

@@ -60,7 +60,7 @@ struct SparkyView: View {
                 }
             }.background(Color(nsColor: .windowBackgroundColor))
         }
-        .frame(minWidth: 880, minHeight: 600).tint(.orange).environment(\.locale, Locale(identifier: "zh_CN"))
+        .frame(minWidth: SparkyMainWindow.minimumContentSize.width, minHeight: SparkyMainWindow.minimumContentSize.height).tint(.orange).environment(\.locale, Locale(identifier: "zh_CN"))
         .onAppear { model.confirmSend = { page = .plan; review = true } }
         .sheet(isPresented: $review) { reviewSheet }
         .alert("操作未完成", isPresented: Binding(get: { model.notice != nil }, set: { if !$0 { model.notice = nil } })) {
@@ -259,7 +259,7 @@ struct SparkyView: View {
                 HStack {
                     Text("发送时间")
                     Spacer()
-                    DatePicker("发送时间", selection: Binding(get: { model.timeDate }, set: { model.setTime($0) }), displayedComponents: .hourAndMinute).labelsHidden().datePickerStyle(.field).fixedSize().disabled(model.busy)
+                    DatePicker("发送时间", selection: Binding(get: { model.timeDate }, set: { model.setTime($0) }), displayedComponents: .hourAndMinute).labelsHidden().datePickerStyle(.field).fixedSize().disabled(model.busy).accessibilityIdentifier("plan.time")
                     Text("本地时间").font(.caption).foregroundStyle(.secondary).help(TimeZone.current.localizedName(for: .standard, locale: Locale(identifier: "zh_CN")) ?? TimeZone.current.identifier)
                 }.padding(.horizontal, 16).padding(.vertical, 12)
             }
@@ -400,7 +400,7 @@ struct SparkyView: View {
             }
             HStack(spacing: 10) {
                 SparkyMark(size: 34)
-                VStack(alignment: .leading, spacing: 3) { Text("Sparky 0.3.1").font(.caption.weight(.medium)); Text("设置与记录保存在本机").font(.caption).foregroundStyle(.secondary) }
+                VStack(alignment: .leading, spacing: 3) { Text("Sparky 0.3.2").font(.caption.weight(.medium)); Text("设置与记录保存在本机").font(.caption).foregroundStyle(.secondary) }
                 Spacer()
             }.padding(.horizontal, 4)
         }
