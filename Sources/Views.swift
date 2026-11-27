@@ -334,6 +334,17 @@ struct SparkyView: View {
                     Spacer(); Toggle("登录 Mac 时启动 Sparky", isOn: Binding(get: { model.loginEnabled }, set: { model.setLoginItem($0) })).labelsHidden().toggleStyle(.switch).accessibilityLabel("登录 Mac 时启动 Sparky")
                 }.padding(16)
             }
+            SparkySection("发送方式", footer: "保留未读模式会先给来源会话发送一条文案，再分享给好友。建议选自聊或自己的小号；来源会话本身可能被标为已读。分享失败不会切回普通发送。") {
+                Picker("分享来源（实验性）", selection: Binding(get: { model.shareSourceID ?? "" }, set: { model.setShareSource($0) })) {
+                    Text("关闭 · 普通发送").tag("")
+                    ForEach(model.saved.contacts.filter { !$0.group && (!model.saved.selected.contains($0.id) || $0.id == model.shareSourceID) }) { contact in
+                        Text(contact.title).tag(contact.id)
+                    }
+                    if let id = model.shareSourceID, !model.saved.contacts.contains(where: { $0.id == id && !$0.group }) {
+                        Text("来源已不可用").tag(id)
+                    }
+                }.padding(16).disabled(model.busy || model.saved.account == nil)
+            }
             SparkySection("诊断", footer: "任务结束后自动释放网页，登录状态保留。") {
                 VStack(alignment: .leading, spacing: 0) {
                     HStack(spacing: 12) {
@@ -352,7 +363,7 @@ struct SparkyView: View {
             }
             HStack(spacing: 10) {
                 SparkyMark(size: 34)
-                VStack(alignment: .leading, spacing: 3) { Text("Sparky 1.0.0").font(.caption.weight(.medium)); Text("设置与记录保存在本机").font(.caption).foregroundStyle(.secondary) }
+                VStack(alignment: .leading, spacing: 3) { Text("Sparky 1.1.1").font(.caption.weight(.medium)); Text("设置与记录保存在本机").font(.caption).foregroundStyle(.secondary) }
                 Spacer()
             }.padding(.horizontal, 4)
         }
@@ -387,6 +398,7 @@ struct SparkyView: View {
             }
             SparkySurface { Text(model.saved.message).font(.body).textSelection(.enabled).padding(16) }
             ScrollView { VStack(alignment: .leading, spacing: 10) { ForEach(model.selectedContacts) { contact in HStack(spacing: 10) { ContactAvatar(contact: contact); Text(contact.title); Spacer() } } }.padding(.trailing, 8) }.frame(maxHeight: 180)
+            if let id = model.shareSourceID { Text("保留未读 · 来源：\(model.saved.contacts.first { $0.id == id }?.title ?? "不可用")").font(.callout) }
             Text("逐个发送，每个会话只触发一次。本次执行计入今日计划，今天不会再自动发送。").font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             HStack {
                 Spacer(); Button("取消") { review = false }.keyboardShortcut(.cancelAction)

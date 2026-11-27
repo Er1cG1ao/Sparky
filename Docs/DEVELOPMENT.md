@@ -73,3 +73,7 @@ Native design decisions and the external skill references are recorded in [Desig
 Documentation languages do not imply interface localization: the current app UI is Simplified Chinese. Refer to actual Chinese button labels when describing the app in English.
 
 Attribution and icon provenance are in [Third-party notices](../THIRD_PARTY_NOTICES.md).
+
+### Forwarding prototype
+
+`--self-test --share-only` uses the offline WebKit fixture to test forwarding to an exact conversation ID among duplicate visible names, and verifies that the source conversation stays selected. The experimental mode is enabled per account in Settings by selecting a source conversation. Live compatibility depends on the share picker exposing the same conversation ID as the chat list. If the ID cannot be verified, it skips the recipient; it does not open that conversation to send directly. A page confirmation is not a streak or read-state receipt.

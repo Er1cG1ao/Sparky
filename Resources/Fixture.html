@@ -22,5 +22,26 @@ sendButton.onclick=()=>{
  const msg=document.createElement('span');msg.setAttribute('data-e2e','msg-item-content');msg.textContent=ed.textContent;wrap.appendChild(msg);document.querySelector('#messages').appendChild(wrap);ed.textContent='';window.fixtureSent++;
  fetch('https://imapi.douyin.com/v1/message/send');
 };
+window.fixtureShares=0;
+document.querySelector('#messages').addEventListener('contextmenu', event => {
+ if(!event.target.matches('[data-e2e="msg-item-content"]')) return;
+ event.preventDefault();
+ const share=document.createElement('button'); share.textContent='分享'; document.body.append(share);
+ share.onclick=()=>{
+   share.remove();
+   const dialog=document.createElement('div');
+   dialog.innerHTML='<span>选择朋友</span><input placeholder="搜索"><div><span>离线联系人 B</span><button>发送</button></div><div><span>离线联系人 B</span><button>发送</button></div>';
+   const rows=dialog.querySelectorAll('div');
+   rows[0].__reactProps$fixture={conversation:{id:'wrong-user'}};
+   rows[0].querySelector('button').onclick=()=>window.fixtureShares+=100;
+   rows[1].__reactProps$fixture={conversation:{id:'test-b'}};
+   rows[1].querySelector('button').onclick=e=>{window.fixtureShares++;if(window.fixtureCloseShare) {dialog.remove(); window.fixtureCloseShare=false;} else {const replacement=document.createElement('button'); replacement.textContent='捎句话'; e.target.replaceWith(replacement);}};
+   const extra=document.createElement('div'); extra.innerHTML='<span>离线联系人 C</span><button>发送</button>';
+   extra.__reactProps$fixture={conversation:{id:'test-c'}};
+   extra.querySelector('button').onclick=e=>{window.fixtureShares++;e.target.textContent='已发送';};
+   dialog.append(extra);
+   document.body.append(dialog);
+ };
+});
 fetch('https://www.douyin.com/aweme/v1/web/user/profile/self/');
 </script>

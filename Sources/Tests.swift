@@ -4,6 +4,38 @@ import Foundation
 @MainActor
 enum SelfTests {
     static func check(_ condition: Bool, _ message: String) throws { if !condition { throw PrototypeError.message(message) }; print("PASS: \(message)") }
+    static func runShare(_ model: SparkyModel) async throws {
+        let engine = model.engine
+        try engine.start(show: false)
+        let contacts = try await engine.scan()
+        let source = contacts[0], target = contacts[1]
+        try await engine.stageShare(from: source, text: "分享离线测试 🔥", shouldStop: { false })
+        let stranger = Contact(id: "unknown", title: target.title, group: false)
+        do {
+            _ = try await engine.share(stranger, beforeDispatch: { throw PrototypeError.message("unexpected dispatch") })
+            throw PrototypeError.message("unexpected result")
+        } catch {
+            try check(error.localizedDescription.contains("唯一核对"), "a matching name alone cannot trigger sharing")
+        }
+        var journaled = false
+        let result = try await engine.share(target, beforeDispatch: { journaled = true })
+        let count = try await engine.evaluate("window.fixtureShares") as? Int
+        let active = try await engine.call("current") as? [String:Any]
+        try check(result.state == .pageOnly && result.detail.contains("捎句话") && journaled && count == 1 && active?["id"] as? String == source.id,
+                  "share chooses the exact ID among duplicate names and leaves the source conversation open")
+        engine.stop()
+        try engine.start(show: false)
+        _ = try await engine.accountInfo()
+        _ = try await engine.evaluate("window.fixtureCloseShare=true")
+        try await engine.stageShare(from: source, text: "多收件人离线测试", shouldStop: { false })
+        let first = try await engine.share(target, beforeDispatch: {})
+        let second = try await engine.share(Contact(id: "test-c", title: "离线联系人 C", group: false), beforeDispatch: {})
+        let total = try await engine.evaluate("window.fixtureShares") as? Int
+        try check(first.state == .uncertain && second.state == .pageOnly && total == 2,
+                  "a closed share dialog stays unconfirmed and reopens for the next recipient without duplication")
+        engine.stop()
+    }
+
     static func run(_ model: SparkyModel) async throws {
         DispatchQueue.main.asyncAfter(deadline:.now()+180) { fputs("FAIL: test timeout\n",stderr); exit(1) }
         try await AvatarTests.run()

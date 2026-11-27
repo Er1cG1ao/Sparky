@@ -367,6 +367,45 @@ final class BrowserEngine: NSObject, WKNavigationDelegate, WKUIDelegate, NSWindo
         return Delivery(state: domSeen ? .pageOnly : .uncertain, detail: domSeen ? "页面出现新发出的对应消息，未捕获服务器回执。请用手机核实。" : "已执行发送，但未确认结果；不会自动重试。")
     }
 
+    func stageShare(from source: Contact, text: String, shouldStop: () -> Bool) async throws {
+        try await prepare(source, text: text)
+        _ = try await call("markShareSource", [source.id,text])
+        guard !shouldStop() else { throw CancellationError() }
+        let delivery = try await send(source, text: text)
+        guard delivery.state == .confirmed || delivery.state == .pageOnly else {
+            throw PrototypeError.message("来源消息未确认，未向好友分享。请检查来源会话，不要立即重试。")
+        }
+    }
+
+    func share(_ contact: Contact, beforeDispatch: () throws -> Void) async throws -> Delivery {
+        if let lastDispatch, lastDispatch.duration(to: .now) < .seconds(1) {
+            try await Task.sleep(for: .seconds(1) - lastDispatch.duration(to: .now))
+        }
+        for _ in 0..<35 {
+            if try await call("shareStep") as? String == "ready",
+               try await call("prepareShare", [contact.id,contact.title]) as? Bool == true {
+                try beforeDispatch()
+                lastDispatch = .now
+                guard try await call("sendShare", [contact.id,contact.title]) as? Bool == true else {
+                    throw PrototypeError.message("分享按钮或收件人发生变化，请核实结果。")
+                }
+                for _ in 0..<24 {
+                    let proof = try await call("shareProof")
+                    if let evidence = proof as? [String: Any], evidence["state"] as? String == "sent",
+                       let label = evidence["label"] as? String {
+                        return Delivery(state: .pageOnly, detail: "该收件人的分享按钮变为「\(label)」，未打开收件人会话。请在手机确认火花。")
+                    }
+                    if proof as? String == "changed" { throw PrototypeError.message("分享后来源会话已变化，请手动核实。") }
+                    if proof as? String == "closed" { break }
+                    try await pause(0.15)
+                }
+                return Delivery(state: .uncertain, detail: "已点击一次分享发送，但页面未确认结果；不会自动重试。")
+            }
+            try await pause(0.15)
+        }
+        throw PrototypeError.message("无法在分享窗口按会话 ID 唯一核对收件人，未分享，也不会切回普通发送。")
+    }
+
     func accountInfo() async throws -> AccountInfo {
         try await waitUntilReady()
         for _ in 0..<20 {

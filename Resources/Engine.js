@@ -112,5 +112,82 @@
     const fresh=attempt?items.length>attempt.beforeCount||last!==attempt.beforeNode:false;
     const domSeen=fresh&&!!last&&!!last.closest('.MessageBoxContentisFromMe')&&messageText(last.textContent)===messageText(text)&&messageText(editor()?.textContent)==='';
     return {state:'waiting',domSeen,editorEmpty:messageText(editor()?.textContent)===''};}
-  Object.defineProperty(window,'__sparkPrototype',{value:Object.freeze({status,rows,current,select,scroll,draftState,inspectDraft,sendDiagnostic,send,proof,decodeReceipt}),configurable:false,writable:false});
+  const visible = el => !!el?.isConnected && el.getClientRects().length > 0 && getComputedStyle(el).visibility === 'visible';
+  const exact = (root, label) => [...root.querySelectorAll('button,[role="button"],[role="menuitem"],span,div')]
+    .filter(el => visible(el) && clean(el.textContent) === label && ![...el.children].some(c => visible(c) && clean(c.textContent) === label));
+  const matchesMessage = text => [...document.querySelectorAll('[data-e2e="msg-item-content"]')]
+    .filter(el => el.closest('.MessageBoxContentisFromMe') && messageText(el.textContent) === messageText(text));
+  function markShareSource(id,text) {
+    if(current()?.id!==id) throw Error('来源会话已变化');
+    if(shareDialog()) throw Error('请先关闭已有分享窗口');
+    state.share = {id,text,old:new WeakSet(matchesMessage(text)),message:null,button:null,attempted:new Set()};
+  }
+  function shareDialog() {
+    const roots = new Set();
+    for(const heading of exact(document,'选择朋友')) for(let el=heading.parentElement;el&&el!==document.body;el=el.parentElement){
+      if(el.querySelector('input[placeholder="搜索"],input[aria-label="搜索"]')) { roots.add(el); break; }
+    }
+    return roots.size===1?[...roots][0]:null;
+  }
+  function shareStep() {
+    const source=state.share;
+    if(!source||current()?.id!==source.id) throw Error('来源会话已变化，已停止分享');
+    if(shareDialog()) return source.opened ? 'ready' : 'waiting';
+    if(!source.message) {
+      const fresh=matchesMessage(source.text).filter(el=>!source.old.has(el));
+      if(fresh.length!==1) return 'waiting';
+      source.message=fresh[0];
+    }
+    const choices=exact(document,'分享');
+    if(source.menuRequested && !source.waitingForDialog && choices.length===1) { source.opened=true; source.waitingForDialog=true; choices[0].click(); return 'opening'; }
+    if(source.menuRequested) return 'waiting';
+    if(choices.length || !visible(source.message)) return 'waiting';
+    const rect=source.message.getBoundingClientRect();
+    source.menuRequested=true;
+    source.message.dispatchEvent(new MouseEvent('contextmenu',{button:2,bubbles:true,cancelable:true,view:window,clientX:rect.x+rect.width/2,clientY:rect.y+rect.height/2}));
+    return 'waiting';
+  }
+  const shareConfirmation = (row) => [...new Set([...exact(row,'已发送'),...exact(row,'捎句话')])];
+  function shareRow(root,id,title) {
+    const candidates=new Set();
+    for(const label of exact(root,title)) {
+      for(let row=label.parentElement;row&&row!==root;row=row.parentElement){
+        const actions=[...exact(row,'发送'),...shareConfirmation(row)];
+        if(!actions.length) continue;
+        const conversation=convOf(row);
+        if(actions.length===1 && clean(conversation?.id||conversation?.conversationId)===id) candidates.add(row);
+        break;
+      }
+    }
+    return candidates.size===1?[...candidates][0]:null;
+  }
+  function prepareShare(id,title) {
+    const source=state.share, root=shareDialog();
+    if(!source||current()?.id!==source.id||!root) return false;
+    const row=shareRow(root,id,title), matches=row?exact(row,'发送'):[];
+    source.button=matches.length===1?matches[0]:null;
+    return !!source.button;
+  }
+  function sendShare(id,title) {
+    const source=state.share, expected=source?.button;
+    if(!expected || source.attempted.has(id) || !prepareShare(id,title) || source.button!==expected || expected.closest('[disabled],[aria-disabled="true"]')) return false;
+    source.button=null;
+    source.attempted.add(id);
+    source.clicked={id,title,root:shareDialog()};
+    source.menuRequested=false;
+    source.waitingForDialog=false;
+    expected.click();
+    return true;
+  }
+  function shareProof() {
+    const source=state.share;
+    if(!source||current()?.id!==source.id) return 'changed';
+    const attempt=source.clicked, root=shareDialog();
+    if(!attempt) return 'waiting';
+    if(!root || root!==attempt.root) return 'closed';
+    const row=shareRow(root,attempt.id,attempt.title);
+    const confirmations=row?shareConfirmation(row):[];
+    return confirmations.length===1?{state:'sent',label:clean(confirmations[0].textContent)}:'waiting';
+  }
+  Object.defineProperty(window,'__sparkPrototype',{value:Object.freeze({status,rows,current,select,scroll,draftState,inspectDraft,sendDiagnostic,send,proof,markShareSource,shareStep,prepareShare,sendShare,shareProof,decodeReceipt}),configurable:false,writable:false});
 })();

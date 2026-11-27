@@ -66,6 +66,7 @@ struct SendRecord: Codable, Identifiable {
 struct SavedState: Codable {
     var version = 1
     var logoutPending: Bool? = nil
+    var shareSourcesByAccount: [String: String]? = nil
     var selectionsByAccount: [String: Set<String>]? = nil
     var account: AccountInfo?
     var contacts: [Contact] = []
@@ -352,11 +353,31 @@ final class SparkyModel: ObservableObject {
             if !state.unfinished { data.history[index].finished = Date() }
         }
     }
+    var shareSourceID: String? {
+        saved.account.flatMap { saved.shareSourcesByAccount?[$0.uid] }
+    }
+    func setShareSource(_ id: String) {
+        guard !busy, let uid = saved.account?.uid else { return }
+        edit {
+            var sources = $0.shareSourcesByAccount ?? [:]
+            sources[uid] = id.isEmpty ? nil : id
+            $0.shareSourcesByAccount = sources
+        }
+    }
     func runBatch(scheduled: Bool) async {
         guard !busy else { return }
         if scheduled && saved.plan.due(at: Date()) == nil { return }
         guard canRun, let account = saved.account else { notice = "请先连接账号、选择联系人并填写消息。"; return }
         let targets = selectedContacts, text = saved.message, runID = UUID(), start = Date()
+        let source: Contact?
+        if let sourceID = shareSourceID {
+            guard let match = saved.contacts.first(where: { $0.id == sourceID && !$0.group }),
+                  !targets.contains(where: { $0.id == sourceID }) else {
+                notice = "请选择一个未加入发送名单的自聊或备用账号作为分享来源。未发送。"
+                return
+            }
+            source = match
+        } else { source = nil }
         let records = targets.map { SendRecord(runID: runID, contactID: $0.id, name: $0.title, accountUID: account.uid, date: start, scheduled: scheduled, state: .queued, detail: "等待执行") }
         do {
             // Claim today's run durably before starting WebKit. A restart must
@@ -379,6 +400,10 @@ final class SparkyModel: ObservableObject {
             try engine.start(show: false); engineActive = true; engine.window?.orderOut(nil)
             let actual = try await engine.accountInfo()
             guard actual.uid == account.uid else { throw PrototypeError.message("当前登录账号与计划账号不一致。请刷新联系人后重新配置。") }
+            if let source {
+                activity = "正在准备分享来源…"
+                try await engine.stageShare(from: source, text: text, shouldStop: { self.cancelRequested })
+            }
             for (index, contact) in targets.enumerated() {
                 if cancelRequested { break }
                 let record = records[index]
@@ -387,15 +412,17 @@ final class SparkyModel: ObservableObject {
                 let contactStart = ContinuousClock.now
                 do {
                     try updateRecord(record.id, state: .preparing, detail: "正在定位联系人、核对草稿")
-                    try await engine.prepare(contact, text: text)
+                    if source == nil { try await engine.prepare(contact, text: text) }
                     let preparedAt=ContinuousClock.now
                     var dispatchAt=preparedAt
                     if cancelRequested { break }
-                    let result = try await engine.send(contact, text: text, beforeDispatch: {
+                    let journal = {
+                        guard !self.cancelRequested else { throw CancellationError() }
                         try self.updateRecord(record.id, state: .sending, detail: "已记录发送意图，正在触发一次发送")
                         dispatched = true
                         dispatchAt = .now
-                    })
+                    }
+                    let result = try await (source == nil ? engine.send(contact, text: text, beforeDispatch: journal) : engine.share(contact, beforeDispatch: journal))
                     try updateRecord(record.id, state: result.state, detail: result.detail, messageID: result.messageID)
                     func seconds(_ duration:Duration) -> String {
                         let c=duration.components
